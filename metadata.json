@@ -1,0 +1,6 @@
+{
+  "name": "TestCase Management",
+  "description": "Enterprise Test Case Management System with Word Import, CSV Import, Screenshot Management, Dashboard Analytics, and Word/PDF/CSV Export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
