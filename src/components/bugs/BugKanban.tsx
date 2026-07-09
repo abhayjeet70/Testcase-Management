@@ -109,7 +109,7 @@ export default function BugKanban({ testCases, users, onStatusChange }: BugKanba
                       key={tc.id}
                       draggable
                       onDragStart={(e) => handleDragStart(e, tc.id)}
-                      className="bg-white border border-[#E7D6C4] rounded-xl p-3 shadow-xs hover:shadow-md hover:border-[#8B5A2B]/50 transition-all cursor-grab active:cursor-grabbing group flex flex-col"
+                      className="bg-white border border-[#E7D6C4] rounded-xl p-3 shadow-xs hover:shadow-md hover:border-[#8B5A2B]/50 transition-all cursor-grab active:cursor-grabbing group flex flex-col touch-none"
                     >
                       <div className="flex items-start justify-between mb-2">
                         <span className="text-[10px] font-bold text-[#7A6A5A] bg-[#FFF8F2] px-1.5 py-0.5 rounded border border-[#E7D6C4]/50">
@@ -151,6 +151,19 @@ export default function BugKanban({ testCases, users, onStatusChange }: BugKanba
                           </div>
                         </div>
                       )}
+
+                      {/* Mobile Status Selector (Fallback for touch devices where DND is disabled) */}
+                      <div className="mt-3 md:hidden">
+                        <select
+                          value={col.dropStatus}
+                          onChange={(e) => onStatusChange(tc.id, e.target.value as TestCaseStatus)}
+                          className="w-full text-[10px] font-bold border border-[#E7D6C4] rounded-lg px-2 py-1.5 bg-[#FFF8F2] text-[#3B2A1D] focus:outline-none focus:ring-1 focus:ring-[#8B5A2B]"
+                        >
+                          {COLUMNS.map(c => (
+                            <option key={c.id} value={c.dropStatus}>Move to: {c.label}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   )
                 })}

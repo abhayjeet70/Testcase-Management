@@ -6,6 +6,13 @@ import './index.css';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { applySettingsToDom } from './utils/appSettings';
+import { polyfill } from "mobile-drag-drop";
+import { scrollBehaviourDragImageTranslateOverride } from "mobile-drag-drop/scroll-behaviour";
+import "mobile-drag-drop/default.css";
+
+polyfill({
+    dragImageTranslateOverride: scrollBehaviourDragImageTranslateOverride
+});
 
 applySettingsToDom();
 

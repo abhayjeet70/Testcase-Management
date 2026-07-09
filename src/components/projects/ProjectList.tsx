@@ -50,6 +50,8 @@ interface ProjectListProps {
   onSelectTab: (tab: string) => void;
   openAddProjectForm?: boolean;
   onAddProjectFormConsumed?: () => void;
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 export default function ProjectList({
@@ -67,6 +69,8 @@ export default function ProjectList({
   onSelectTab,
   openAddProjectForm,
   onAddProjectFormConsumed,
+  isMobileOpen,
+  onCloseMobile
 }: ProjectListProps) {
   const { currentUser } = useAuth();
   const [projSearch, setProjSearch] = useState('');
@@ -113,7 +117,15 @@ export default function ProjectList({
   };
 
   return (
-    <div className="w-[260px] bg-[#FFF4E8] border-r border-[#E7D6C4] h-full flex flex-col justify-between select-none shrink-0 font-sans">
+    <>
+      {/* Mobile Backdrop */}
+      {isMobileOpen && (
+        <div 
+          className="fixed inset-0 bg-black/20 z-30 md:hidden transition-opacity"
+          onClick={onCloseMobile}
+        />
+      )}
+      <div className={`w-[260px] bg-[#FFF4E8] border-r border-[#E7D6C4] h-full flex flex-col justify-between select-none shrink-0 font-sans fixed md:relative z-40 transition-transform duration-300 ease-in-out top-0 left-0 ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
       
       {/* TOP HEADER / LOGO */}
       <div className="p-5 border-b border-[#E7D6C4] shrink-0">
@@ -712,5 +724,6 @@ export default function ProjectList({
         </div>
       )}
     </div>
+    </>
   );
 }

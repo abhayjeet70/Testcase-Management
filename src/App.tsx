@@ -3,7 +3,7 @@ import {
   Folder, ClipboardList, Database, Laptop, Sparkles, 
   Settings, HelpCircle, FileText, ChevronDown, Check, 
   Upload, Download, AlertCircle, X, CheckSquare, Activity,
-  DatabaseZap, Clock, Undo, Search, Command, User as UserIcon
+  DatabaseZap, Clock, Undo, Search, Command, User as UserIcon, Menu
 } from 'lucide-react';
 import mammoth from 'mammoth';
 
@@ -55,9 +55,11 @@ function MainApp() {
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [customColumns, setCustomColumns] = useState<CustomColumn[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
-  
   // Selected single testcase id
   const [selectedTestCaseId, setSelectedTestCaseId] = useState<string | null>(null);
+
+  // Mobile sidebar state
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // Dropdown states in header
   const [showImportDropdown, setShowImportDropdown] = useState(false);
@@ -779,22 +781,30 @@ function MainApp() {
         onSelectTab={setActiveTab}
         openAddProjectForm={openAddProjectForm}
         onAddProjectFormConsumed={() => setOpenAddProjectForm(false)}
+        isMobileOpen={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
       />
 
       {/* CENTER WORKSPACE: OCCUPIES 100% WIDTH NOW */}
       <div className="flex-1 flex flex-col min-w-0 h-full relative">
         
         {/* TOP FIXED APP HEADER */}
-        <header id="tc-header" className="h-[72px] border-b border-[#E7D6C4] bg-white px-6 flex items-center justify-between shrink-0 select-none z-10">
+        <header id="tc-header" className="h-[72px] border-b border-[#E7D6C4] bg-white px-4 md:px-6 flex items-center justify-between shrink-0 select-none z-10">
           
           {/* LEFT HEADER: Suite dropdown selector */}
           <div className="flex items-center gap-3">
-            <Folder className="w-5 h-5 text-[#8B5A2B]" />
+            <button 
+              className="md:hidden p-1.5 text-[#3B2A1D] hover:bg-[#FFF8F2] rounded-lg transition-colors cursor-pointer"
+              onClick={() => setIsMobileSidebarOpen(true)}
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <Folder className="w-5 h-5 text-[#8B5A2B] hidden md:block" />
             <div className="relative">
               <select
                 value={selectedProjectId}
                 onChange={e => setSelectedProjectId(e.target.value)}
-                className="appearance-none pl-3 pr-8 py-1.5 border border-[#E7D6C4] rounded-xl text-xs font-bold text-[#3B2A1D] bg-white hover:bg-[#FFF8F2]/50 cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-[#8B5A2B] transition-all min-w-[180px]"
+                className="appearance-none pl-3 pr-8 py-1.5 border border-[#E7D6C4] rounded-xl text-xs font-bold text-[#3B2A1D] bg-white hover:bg-[#FFF8F2]/50 cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-[#8B5A2B] transition-all w-[130px] md:w-auto md:min-w-[180px] truncate"
               >
                 {projects.map(p => (
                   <option key={p.id} value={p.id}>
@@ -805,7 +815,7 @@ function MainApp() {
               <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-[#7A6A5A]" />
             </div>
 
-            <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 border ${
+            <span className={`hidden md:flex text-[10px] font-semibold px-2.5 py-1 rounded-full items-center gap-1 border ${
               supabaseConnected 
                 ? 'bg-[#34C759]/10 text-[#34C759] border-[#34C759]/20' 
                 : 'bg-[#FFF4E8] text-[#8B5A2B] border-[#E7D6C4]/60'
@@ -816,11 +826,11 @@ function MainApp() {
           </div>
 
           {/* RIGHT HEADER ACTIONS (Import & Export drop downs) */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 md:gap-3">
             <button
               type="button"
               onClick={() => { setShowWorkspaceSearch(true); setShowCommandPalette(false); }}
-              className="p-2 border border-[#E7D6C4] rounded-xl hover:bg-[#FFF4E8] text-[#7A6A5A]"
+              className="hidden sm:block p-2 border border-[#E7D6C4] rounded-xl hover:bg-[#FFF4E8] text-[#7A6A5A]"
               title="Workspace Search (Ctrl+Shift+F)"
             >
               <Search className="w-4 h-4" />
@@ -828,7 +838,7 @@ function MainApp() {
             <button
               type="button"
               onClick={() => { setShowCommandPalette(true); setShowWorkspaceSearch(false); }}
-              className="p-2 border border-[#E7D6C4] rounded-xl hover:bg-[#FFF4E8] text-[#7A6A5A]"
+              className="hidden sm:block p-2 border border-[#E7D6C4] rounded-xl hover:bg-[#FFF4E8] text-[#7A6A5A]"
               title="Command Palette (Ctrl+Shift+P)"
             >
               <Command className="w-4 h-4" />
@@ -839,11 +849,11 @@ function MainApp() {
                   setShowImportDropdown(!showImportDropdown);
                   setShowExportDropdown(false);
                 }}
-                className="px-3.5 py-2 border border-[#E7D6C4] hover:bg-[#FFF4E8]/40 text-[#3B2A1D] text-xs font-semibold rounded-xl transition-all flex items-center gap-2 cursor-pointer"
+                className="px-2 md:px-3.5 py-2 border border-[#E7D6C4] hover:bg-[#FFF4E8]/40 text-[#3B2A1D] text-xs font-semibold rounded-xl transition-all flex items-center gap-1.5 md:gap-2 cursor-pointer"
               >
-                <Upload className="w-3.5 h-3.5 text-[#7A6A5A]" />
-                Import Suite
-                <ChevronDown className="w-3.5 h-3.5 text-[#7A6A5A]" />
+                <Upload className="w-4 h-4 md:w-3.5 md:h-3.5 text-[#7A6A5A]" />
+                <span className="hidden md:inline">Import Suite</span>
+                <ChevronDown className="w-3.5 h-3.5 text-[#7A6A5A] hidden sm:block" />
               </button>
 
               {showImportDropdown && (
@@ -873,11 +883,11 @@ function MainApp() {
                   setShowExportDropdown(!showExportDropdown);
                   setShowImportDropdown(false);
                 }}
-                className="px-4 py-2 bg-[#8B5A2B] hover:bg-[#A66B37] text-white text-xs font-bold rounded-xl transition-all flex items-center gap-2 shadow-xs cursor-pointer"
+                className="px-2 md:px-4 py-2 bg-[#8B5A2B] hover:bg-[#A66B37] text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 md:gap-2 shadow-xs cursor-pointer"
               >
-                <Download className="w-3.5 h-3.5" />
-                Export Ledger
-                <ChevronDown className="w-3.5 h-3.5" />
+                <Download className="w-4 h-4 md:w-3.5 md:h-3.5" />
+                <span className="hidden md:inline">Export Ledger</span>
+                <ChevronDown className="w-3.5 h-3.5 hidden sm:block" />
               </button>
 
               {showExportDropdown && (
@@ -928,17 +938,17 @@ function MainApp() {
             
             {/* USER PROFILE & LOGOUT */}
             {currentUser && (
-              <div className="relative ml-4 pl-4 border-l border-[#E7D6C4]">
+              <div className="relative ml-2 md:ml-4 pl-2 md:pl-4 border-l border-[#E7D6C4]">
                 <button
                   onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                  className="flex items-center gap-3 hover:bg-[#FFF8F2] p-1.5 rounded-xl transition-colors cursor-pointer"
+                  className="flex items-center gap-2 md:gap-3 hover:bg-[#FFF8F2] p-1 md:p-1.5 rounded-xl transition-colors cursor-pointer"
                 >
-                  <div className="flex flex-col items-end">
+                  <div className="hidden md:flex flex-col items-end">
                     <span className="text-sm font-bold text-[#3B2A1D] leading-none">{currentUser.name}</span>
                     <span className="text-[10px] font-semibold text-[#8B5A2B] uppercase tracking-wider mt-1">{currentUser.role.replace('_', ' ')}</span>
                   </div>
-                  <div className="p-2 border border-[#E7D6C4] rounded-xl text-[#7A6A5A] bg-white">
-                    <UserIcon className="w-4 h-4" />
+                  <div className="p-1.5 md:p-2 border border-[#E7D6C4] rounded-xl text-[#7A6A5A] bg-white">
+                    <UserIcon className="w-4 h-4 md:w-4 md:h-4" />
                   </div>
                 </button>
                 
