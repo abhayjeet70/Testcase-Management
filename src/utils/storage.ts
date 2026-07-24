@@ -2,6 +2,7 @@ import { Project, TestCase, TestCaseDocument, CustomColumn, ActivityLog, Documen
 import { generateTestCaseNo, formatTestCaseId, getResolvedPrefix, getResolvedModuleCode, isDuplicateTestCaseId } from './testCaseIdGenerator';
 import { DEFAULT_TEMPLATES } from '../data/defaultTemplates';
 import { getDefaultStatus } from './appSettings';
+import { upsertRecord, deleteRecord } from './supabaseSync';
 
 // Storage keys
 const PROJECTS_KEY = 'tc_projects';
@@ -347,6 +348,9 @@ export const saveProject = (project: Partial<Project> & { project_name: string }
 
   localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
   addActivityLog(savedProject.id, `Project "${savedProject.project_name}" ${project.id ? 'updated' : 'created'}`);
+  
+  upsertRecord('tc_projects', savedProject);
+  
   return savedProject;
 };
 
@@ -378,6 +382,8 @@ export const deleteProject = (id: string, deletedBy: string = 'Current User') =>
   });
   localStorage.setItem(RECYCLE_BIN_KEY, JSON.stringify(recycle));
   addActivityLog(id, `Deleted project "${project.project_name}"`, undefined, undefined);
+
+  deleteRecord('tc_projects', id);
 };
 
 export const duplicateProject = (id: string): Project => {
@@ -442,6 +448,11 @@ export const duplicateProject = (id: string): Project => {
   localStorage.setItem(TEST_CASES_KEY, JSON.stringify([...allCases, ...newCasesToSave]));
 
   addActivityLog(duplicated.id, `Duplicated project from "${source.project_name}"`);
+  
+  upsertRecord('tc_projects', duplicated);
+  newDocsToSave.forEach(d => upsertRecord('tc_documents', d));
+  newCasesToSave.forEach(tc => upsertRecord('tc_test_cases', tc));
+
   return duplicated;
 };
 
@@ -489,6 +500,9 @@ export const saveDocument = (doc: Partial<TestCaseDocument> & { project_id: stri
 
   localStorage.setItem(DOCUMENTS_KEY, JSON.stringify(docs));
   addActivityLog(savedDoc.project_id, `Created/Updated Test Case File "${savedDoc.name}"`);
+  
+  upsertRecord('tc_documents', savedDoc);
+  
   return savedDoc;
 };
 
@@ -515,6 +529,8 @@ export const deleteDocument = (id: string, deletedBy: string = 'Current User'): 
   });
   localStorage.setItem(RECYCLE_BIN_KEY, JSON.stringify(recycle));
   addActivityLog(doc.project_id, `Moved document "${doc.name}" to recycle bin`);
+
+  deleteRecord('tc_documents', id);
 };
 
 export const duplicateDocument = (id: string): TestCaseDocument => {
@@ -554,6 +570,10 @@ export const duplicateDocument = (id: string): TestCaseDocument => {
 
   localStorage.setItem(TEST_CASES_KEY, JSON.stringify([...allCases, ...copiedCases]));
   addActivityLog(duplicated.project_id, `Duplicated document "${source.name}" to "${duplicated.name}"`);
+  
+  upsertRecord('tc_documents', duplicated);
+  copiedCases.forEach(tc => upsertRecord('tc_test_cases', tc));
+  
   return duplicated;
 };
 
@@ -681,6 +701,9 @@ export const saveTestCase = (testCase: Partial<TestCase> & { project_id: string;
   }
 
   localStorage.setItem(TEST_CASES_KEY, JSON.stringify(allCases));
+  
+  upsertRecord('tc_test_cases', savedCase);
+  
   return savedCase;
 };
 
@@ -706,6 +729,8 @@ export const deleteTestCase = (id: string, deletedBy: string = 'Current User') =
     localStorage.setItem(RECYCLE_BIN_KEY, JSON.stringify(recycle));
 
     addActivityLog(tc.project_id, `Deleted testcase`, id, tc.test_case_no);
+
+    deleteRecord('tc_test_cases', id);
   }
 };
 
@@ -742,6 +767,8 @@ export const duplicateTestCase = (id: string): TestCase => {
   // Re-normalize orders
   normalizeOrders(tc.document_id);
   addActivityLog(tc.project_id, `Duplicated testcase from ${tc.test_case_no}`, duplicated.id, duplicated.test_case_no);
+
+  upsertRecord('tc_test_cases', duplicated);
 
   return getTestCasesAll().find(c => c.id === duplicated.id)!;
 };
@@ -812,6 +839,9 @@ export const saveCustomColumn = (col: Partial<CustomColumn> & { project_id: stri
 
   localStorage.setItem(CUSTOM_COLUMNS_KEY, JSON.stringify(cols));
   addActivityLog(savedCol.project_id, `Custom column "${savedCol.name}" added/modified`);
+  
+  upsertRecord('tc_custom_columns', savedCol);
+  
   return savedCol;
 };
 
@@ -828,6 +858,8 @@ export const deleteCustomColumn = (id: string, projectId: string) => {
   });
   localStorage.setItem(TEST_CASES_KEY, JSON.stringify(allCases));
   addActivityLog(projectId, `Deleted custom column`);
+
+  deleteRecord('tc_custom_columns', id);
 };
 
 // --- ACTIVITY LOGS ---
@@ -858,6 +890,8 @@ export const addActivityLog = (projectId: string, action: string, testCaseId?: s
   // Cap at 100 logs per project to keep storage lightweight
   const filtered = logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   localStorage.setItem(LOGS_KEY, JSON.stringify(filtered.slice(0, 500)));
+  
+  upsertRecord('tc_activity_logs', newLog);
 };
 
 // --- DOCUMENT EXPORTS ---
@@ -992,6 +1026,9 @@ export const saveModule = (mod: Partial<ProjectModule> & { project_id: string; n
   }
   localStorage.setItem(MODULES_KEY, JSON.stringify(modules));
   addActivityLog(saved.project_id, `Module "${saved.name}" saved`);
+  
+  upsertRecord('tc_modules', saved);
+  
   return saved;
 };
 
@@ -1008,6 +1045,8 @@ export const deleteModule = (id: string): void => {
   localStorage.setItem(DOCUMENTS_KEY, JSON.stringify(docs));
   localStorage.setItem(MODULES_KEY, JSON.stringify(modules.filter(m => m.id !== id)));
   addActivityLog(mod.project_id, `Deleted module "${mod.name}"`);
+
+  deleteRecord('tc_modules', id);
 };
 
 // --- TAGS ---
@@ -1222,10 +1261,17 @@ export const saveBug = (bug: Bug): void => {
   }
   
   localStorage.setItem(BUGS_KEY, JSON.stringify(bugs));
+  
+  const savedBug = bugs.find(b => b.id === bug.id);
+  if (savedBug) {
+    upsertRecord('tc_bugs', savedBug);
+  }
 };
 
 export const deleteBug = (id: string): void => {
   const bugs = getBugsAll();
   const updatedBugs = bugs.filter(b => b.id !== id);
   localStorage.setItem(BUGS_KEY, JSON.stringify(updatedBugs));
+  
+  deleteRecord('tc_bugs', id);
 };

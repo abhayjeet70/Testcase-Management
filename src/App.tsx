@@ -3,7 +3,7 @@ import {
   Folder, ClipboardList, Database, Laptop, Sparkles, 
   Settings, HelpCircle, FileText, ChevronDown, Check, 
   Upload, Download, AlertCircle, X, CheckSquare, Activity,
-  DatabaseZap, Clock, Undo, Search, Command, User as UserIcon, Menu
+  DatabaseZap, Clock, Undo, Search, Command, User as UserIcon, Menu, Plus
 } from 'lucide-react';
 import mammoth from 'mammoth';
 
@@ -29,12 +29,14 @@ import {
   saveCustomColumn, deleteCustomColumn, getActivityLogs, addActivityLog,
   generateId, getDocumentsAll, archiveProject, restoreProject, deleteDocument,
 } from './utils/storage';
+import { hydrateFromSupabase } from './utils/supabaseSync';
+import { supabase } from './lib/supabase';
 
 import { 
   parseCsvContent, downloadCsvFile, downloadDocxFile, downloadPdfFile 
 } from './utils/documentServices';
 import { useSettings } from './contexts/SettingsContext';
-import { recordRecentItem, recordRecentFile } from './utils/recentItems';
+import { recordRecentItem, recordRecentFile, getRecentItems } from './utils/recentItems';
 import { WorkspaceSearchResult } from './utils/workspaceSearch';
 import { CommandContext } from './utils/commandPalette';
 import { downloadWorkspaceBackup } from './utils/workspaceBackup';
@@ -88,6 +90,13 @@ function MainApp() {
   const [highlightTerm, setHighlightTerm] = useState('');
   const [openAddProjectForm, setOpenAddProjectForm] = useState(false);
   const tableAddRowRef = useRef<(() => void) | null>(null);
+  
+  // Navbar project dropdown state
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
+  const [newNavProjectName, setNewNavProjectName] = useState('');
+  const [projectDropdownPos, setProjectDropdownPos] = useState({ top: 0, left: 0 });
+  const projectBtnRef = useRef<HTMLButtonElement>(null);
 
   // Unified Columns Import Mapping states
   const [mappingConfig, setMappingConfig] = useState<{
@@ -127,14 +136,20 @@ function MainApp() {
   // Initial mount: load data
   useEffect(() => {
     initializeStorage();
-    refreshData();
     
-    // Check if Supabase keys exist (Graceful fallback)
-    const url = (import.meta as any).env?.VITE_SUPABASE_URL;
-    const key = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
-    if (url && key && url !== 'MY_SUPABASE_URL') {
-      setSupabaseConnected(true);
-    }
+    // Check if user is logged into Supabase
+    const checkSupabase = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const isConnected = !!session?.user;
+      setSupabaseConnected(isConnected);
+      
+      if (isConnected) {
+        // Hydrate local cache from Supabase
+        await hydrateFromSupabase();
+      }
+      refreshData();
+    };
+    checkSupabase();
   }, []);
 
   // Global keyboard shortcuts
@@ -188,13 +203,17 @@ function MainApp() {
   }, [handleSelectProject, handleSelectDocument]);
 
   const refreshData = (targetProjId?: string, targetDocId?: string) => {
-    const loadedProjects = getProjects();
+    // Filter out corrupted projects (those without a project_name)
+    const loadedProjects = getProjects().filter(p => p.project_name?.trim());
     setProjects(loadedProjects);
 
     // Pick active project
     let activeProjId = targetProjId || selectedProjectId;
-    if (!activeProjId && loadedProjects.length > 0) {
+    const isValidProject = loadedProjects.some(p => p.id === activeProjId);
+    if (!isValidProject && loadedProjects.length > 0) {
       activeProjId = loadedProjects[0].id;
+    } else if (loadedProjects.length === 0) {
+      activeProjId = '';
     }
     setSelectedProjectId(activeProjId);
 
@@ -788,11 +807,11 @@ function MainApp() {
       {/* CENTER WORKSPACE: OCCUPIES 100% WIDTH NOW */}
       <div className="flex-1 flex flex-col min-w-0 h-full relative">
         
-        {/* TOP FIXED APP HEADER */}
-        <header id="tc-header" className="h-[72px] border-b border-[#E7D6C4] bg-white px-4 md:px-6 flex items-center justify-between shrink-0 select-none z-10">
+        {/* HEADER SECTION */}
+        <header className="bg-white border-b border-[#E7D6C4] px-4 md:px-6 py-3 flex items-center justify-between shrink-0 sticky top-0 z-20 shadow-[0_4px_20px_rgba(139,90,43,0.03)] overflow-x-auto no-scrollbar">
           
           {/* LEFT HEADER: Suite dropdown selector */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <button 
               className="md:hidden p-1.5 text-[#3B2A1D] hover:bg-[#FFF8F2] rounded-lg transition-colors cursor-pointer"
               onClick={() => setIsMobileSidebarOpen(true)}
@@ -801,18 +820,96 @@ function MainApp() {
             </button>
             <Folder className="w-5 h-5 text-[#8B5A2B] hidden md:block" />
             <div className="relative">
-              <select
-                value={selectedProjectId}
-                onChange={e => setSelectedProjectId(e.target.value)}
-                className="appearance-none pl-3 pr-8 py-1.5 border border-[#E7D6C4] rounded-xl text-xs font-bold text-[#3B2A1D] bg-white hover:bg-[#FFF8F2]/50 cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-[#8B5A2B] transition-all w-[130px] md:w-auto md:min-w-[180px] truncate"
+              {/* Custom Project Dropdown Button */}
+              <button
+                ref={projectBtnRef}
+                onClick={() => {
+                  if (!showProjectDropdown && projectBtnRef.current) {
+                    const rect = projectBtnRef.current.getBoundingClientRect();
+                    setProjectDropdownPos({ top: rect.bottom + 6, left: rect.left });
+                  }
+                  setShowProjectDropdown(v => !v);
+                }}
+                className="flex items-center gap-2 pl-3 pr-8 py-1.5 border border-[#E7D6C4] rounded-xl text-xs font-bold text-[#3B2A1D] bg-white hover:bg-[#FFF8F2]/50 cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-[#8B5A2B] transition-all min-w-[180px] text-left"
               >
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.project_name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-[#7A6A5A]" />
+                <span className="truncate flex-1">{activeProjectName !== 'Select Suite' ? activeProjectName : (projects.length === 0 ? 'No Projects — Click to Create' : 'Select Project')}</span>
+              </button>
+              <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-[#7A6A5A] pointer-events-none" />
+
+              {/* Click-outside overlay — must be BEFORE dropdown so dropdown is on top */}
+              {showProjectDropdown && (
+                <div className="fixed inset-0 z-[55]" onClick={() => setShowProjectDropdown(false)} />
+              )}
+
+              {showProjectDropdown && (
+                <div
+                  className="fixed bg-white border border-[#E7D6C4] rounded-xl shadow-2xl z-[60] w-64 overflow-hidden animate-fade-in"
+                  style={{ top: projectDropdownPos.top, left: projectDropdownPos.left }}
+                >
+                  <div className="max-h-64 overflow-y-auto">
+                    {projects.length === 0 ? (
+                      <div className="px-4 py-3 text-xs text-[#7A6A5A] italic">No projects yet. Create one below!</div>
+                    ) : (
+                      <>
+                        {(() => {
+                          const recentProjectIds = getRecentItems(['project']).map(r => r.id);
+                          const recentProjects = recentProjectIds.map(id => projects.find(p => p.id === id)).filter(Boolean) as typeof projects;
+                          const hasRecent = recentProjects.length > 0;
+                          
+                          return (
+                            <>
+                              {hasRecent && (
+                                <div className="mb-2">
+                                  <div className="px-4 py-1.5 text-[10px] font-bold text-[#7A6A5A] uppercase tracking-wider bg-[#FFF8F2]/50">Recent Projects</div>
+                                  {recentProjects.slice(0, 3).map(p => (
+                                    <button
+                                      key={`recent-${p.id}`}
+                                      onClick={() => { handleSelectProject(p.id); setShowProjectDropdown(false); }}
+                                      className={`w-full text-left px-4 py-2 text-xs font-semibold transition-colors flex items-center gap-2 ${
+                                        selectedProjectId === p.id ? 'bg-[#FFF4E8] text-[#8B5A2B]' : 'text-[#3B2A1D] hover:bg-[#FFF8F2]'
+                                      }`}
+                                    >
+                                      <Clock className="w-3 h-3 shrink-0 opacity-50" />
+                                      <span className="truncate">{p.project_name}</span>
+                                      {selectedProjectId === p.id && <Check className="w-3.5 h-3.5 ml-auto text-[#8B5A2B] shrink-0" />}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              
+                              <div>
+                                <div className="px-4 py-1.5 text-[10px] font-bold text-[#7A6A5A] uppercase tracking-wider bg-[#FFF8F2]/50">All Projects</div>
+                                {projects.map(p => (
+                                  <button
+                                    key={p.id}
+                                    onClick={() => { handleSelectProject(p.id); setShowProjectDropdown(false); }}
+                                    className={`w-full text-left px-4 py-2 text-xs font-semibold transition-colors flex items-center gap-2 ${
+                                      selectedProjectId === p.id ? 'bg-[#FFF4E8] text-[#8B5A2B]' : 'text-[#3B2A1D] hover:bg-[#FFF8F2]'
+                                    }`}
+                                  >
+                                    <Folder className="w-3.5 h-3.5 shrink-0 opacity-60" />
+                                    <span className="truncate">{p.project_name}</span>
+                                    {selectedProjectId === p.id && <Check className="w-3.5 h-3.5 ml-auto text-[#8B5A2B] shrink-0" />}
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </>
+                    )}
+                  </div>
+                  <div className="border-t border-[#E7D6C4] p-2">
+                    <button
+                      onClick={() => { setShowProjectDropdown(false); setShowCreateProjectModal(true); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 bg-[#8B5A2B] hover:bg-[#A66B37] text-white text-xs font-bold rounded-lg transition-all cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Create New Project
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <span className={`hidden md:flex text-[10px] font-semibold px-2.5 py-1 rounded-full items-center gap-1 border ${
@@ -826,7 +923,7 @@ function MainApp() {
           </div>
 
           {/* RIGHT HEADER ACTIONS (Import & Export drop downs) */}
-          <div className="flex items-center gap-1.5 md:gap-3">
+          <div className="flex items-center gap-1.5 md:gap-3 shrink-0 ml-4">
             <button
               type="button"
               onClick={() => { setShowWorkspaceSearch(true); setShowCommandPalette(false); }}
@@ -1024,8 +1121,15 @@ function MainApp() {
               showToast={showToast}
             />
           ) : activeTab === 'CSVConverter' ? (
-            <CsvToWordConverter
-              showToast={showToast}
+            <CsvToWordConverter 
+              showToast={showToast} 
+              selectedProjectId={selectedProjectId}
+              projects={projects}
+              onSelectProject={handleSelectProject}
+              onSavedToSpreadsheet={(docId) => {
+                refreshData(selectedProjectId, docId);
+                setActiveTab('Test Cases Spreadsheet');
+              }}
             />
           ) : activeTab === 'DownloadHistory' ? (
             <DownloadHistory
@@ -1073,6 +1177,8 @@ function MainApp() {
                 customColumns={customColumns}
                 projectId={selectedProjectId}
                 documentId={selectedDocumentId}
+                documents={getDocuments(selectedProjectId)}
+                onSelectDocument={setSelectedDocumentId}
                 onSaveTestCase={handleSaveTestCase}
                 onDeleteTestCase={handleDeleteTestCase}
                 onDuplicateTestCase={handleDuplicateTestCase}
@@ -1089,6 +1195,55 @@ function MainApp() {
           )}
         </main>
       </div>
+
+      {/* CREATE PROJECT MODAL */}
+      {showCreateProjectModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4 animate-fade-in" onClick={() => setShowCreateProjectModal(false)}>
+          <div className="bg-white border border-[#E7D6C4] rounded-2xl p-6 max-w-sm w-full shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-bold text-[#3B2A1D] mb-1">Create New Project</h3>
+            <p className="text-xs text-[#7A6A5A] mb-4">Enter a name for your new project suite.</p>
+            <input
+              id="newNavProjectName"
+              name="newNavProjectName"
+              type="text"
+              autoFocus
+              value={newNavProjectName}
+              onChange={e => setNewNavProjectName(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && newNavProjectName.trim()) {
+                  handleAddProject(newNavProjectName.trim());
+                  setNewNavProjectName('');
+                  setShowCreateProjectModal(false);
+                }
+                if (e.key === 'Escape') setShowCreateProjectModal(false);
+              }}
+              placeholder="e.g. My QA Suite"
+              className="w-full px-3.5 py-2.5 border border-[#E7D6C4] rounded-xl text-sm bg-[#FFF8F2]/30 text-[#3B2A1D] focus:ring-2 focus:ring-[#8B5A2B] focus:outline-none mb-4"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => { setShowCreateProjectModal(false); setNewNavProjectName(''); }}
+                className="px-4 py-2 border border-[#E7D6C4] text-[#7A6A5A] text-xs font-semibold rounded-xl hover:bg-gray-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (newNavProjectName.trim()) {
+                    handleAddProject(newNavProjectName.trim());
+                    setNewNavProjectName('');
+                    setShowCreateProjectModal(false);
+                  }
+                }}
+                disabled={!newNavProjectName.trim()}
+                className="px-4 py-2 bg-[#8B5A2B] hover:bg-[#A66B37] text-white text-xs font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-all"
+              >
+                Create Project
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* DYNAMIC WORD EXPORT CONFIGURATION MODAL */}
       {showExportModal && (
@@ -1225,7 +1380,7 @@ function MainApp() {
                 <div className="space-y-2 pt-1 animate-fade-in">
                   <label className="text-[10px] uppercase font-bold text-[#7A6A5A] tracking-wider block mb-0.5">Select Project</label>
                   <select value={importSelectedProjectId} onChange={e => { setImportSelectedProjectId(e.target.value); setImportExistingFileId(''); }} className="w-full px-3 py-1.5 border border-[#E7D6C4] rounded-lg text-xs bg-white text-[#3B2A1D] focus:ring-1 focus:ring-[#8B5A2B] focus:outline-hidden cursor-pointer">
-                    {projects.map(p => <option key={p.id} value={p.id}>{p.project_name}</option>)}
+                    {projects.filter(p => p.project_name?.trim()).map(p => <option key={p.id} value={p.id}>{p.project_name}</option>)}
                   </select>
                 </div>
               )}

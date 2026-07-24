@@ -1,16 +1,34 @@
 import React, { useState } from 'react';
-import { Users, UserPlus, Shield } from 'lucide-react';
+import { Users, UserPlus, Shield, Edit2, Trash2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { User } from '../../types';
 import UserManagementModal from '../dashboard/UserManagementModal';
 
 export default function TeamManagementModule() {
-  const { users } = useAuth();
+  const { users, adminDeleteUser, currentUser } = useAuth();
   const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const showInternalToast = (text: string, type: 'success' | 'error') => {
     setToastMsg({ text, type });
     setTimeout(() => setToastMsg(null), 4000);
+  };
+
+  const handleDelete = async (user: User) => {
+    if (user.id === currentUser?.id) {
+      showInternalToast("You cannot delete your own account.", 'error');
+      return;
+    }
+    
+    if (window.confirm(`Are you sure you want to delete ${user.name}? This action cannot be undone.`)) {
+      const { success, error } = await adminDeleteUser(user.id);
+      if (success) {
+        showInternalToast(`✓ ${user.name} has been deleted.`, 'success');
+      } else {
+        showInternalToast(`Failed to delete user: ${error}`, 'error');
+      }
+    }
   };
 
   const formatDateOnly = (isoString?: string) => {
@@ -51,7 +69,10 @@ export default function TeamManagementModule() {
         </div>
 
         <button
-          onClick={() => setShowAddUserModal(true)}
+          onClick={() => {
+            setEditingUser(null);
+            setShowAddUserModal(true);
+          }}
           className="px-4 py-2 bg-[#8B5A2B] hover:bg-[#A66B37] text-white text-sm font-semibold rounded-xl flex items-center gap-2 transition-colors shadow-xs cursor-pointer"
         >
           <UserPlus className="w-4 h-4" />
@@ -65,10 +86,11 @@ export default function TeamManagementModule() {
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="border-b border-[#E7D6C4] text-[#7A6A5A] font-semibold h-10 bg-gray-50/50">
-                <th className="px-5 py-3">Name</th>
-                <th className="px-5 py-3">Email / Login</th>
-                <th className="px-5 py-3">Role</th>
+                <th className="px-5 py-3 w-1/3">Name</th>
+                <th className="px-5 py-3 w-1/4">Email / Login</th>
+                <th className="px-5 py-3 w-1/6">Role</th>
                 <th className="px-5 py-3 text-right">Joined</th>
+                <th className="px-5 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F5EDE4] text-[#3B2A1D]">
@@ -102,10 +124,31 @@ export default function TeamManagementModule() {
                   <td className="px-5 py-4 text-right text-[#7A6A5A] text-xs">
                     {formatDateOnly(user.createdAt)}
                   </td>
+                  <td className="px-5 py-4 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button 
+                        onClick={() => {
+                          setEditingUser(user);
+                          setShowAddUserModal(true);
+                        }}
+                        className="p-2 text-[#7A6A5A] hover:text-[#8B5A2B] hover:bg-[#FFF4E8] rounded-lg transition-colors cursor-pointer"
+                        title="Edit User"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(user)}
+                        className="p-2 text-[#7A6A5A] hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                        title="Delete User"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={4} className="py-16 text-center">
+                  <td colSpan={5} className="py-16 text-center">
                     <div className="flex flex-col items-center gap-3 text-[#7A6A5A]/50">
                       <Users className="w-10 h-10" />
                       <p className="text-base font-medium">No team members yet.</p>
@@ -121,7 +164,11 @@ export default function TeamManagementModule() {
 
       {showAddUserModal && (
         <UserManagementModal 
-          onClose={() => setShowAddUserModal(false)} 
+          editingUser={editingUser}
+          onClose={() => {
+            setShowAddUserModal(false);
+            setEditingUser(null);
+          }} 
           showToast={showInternalToast}
         />
       )}

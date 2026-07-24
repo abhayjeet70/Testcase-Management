@@ -40,6 +40,8 @@ export interface TestCaseDocument {
   name: string;
   description?: string;
   module_code?: string;
+  project_link?: string;
+  developer_assigned?: string;
   created_at: string;
   updated_at: string;
   archived?: boolean;

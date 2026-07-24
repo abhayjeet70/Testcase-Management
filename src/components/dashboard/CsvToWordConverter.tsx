@@ -3,30 +3,63 @@ import {
   FileText, Upload, Copy, Download, Trash2, Plus, 
   ChevronRight, ArrowRight, Table, Sparkles, CheckCircle2, Edit3 
 } from 'lucide-react';
-import { TestCase } from '../../types';
-import { generateId } from '../../utils/storage';
+import { TestCase, Project, TestCaseDocument } from '../../types';
+import { generateId, saveDocument, saveTestCase, getDocuments } from '../../utils/storage';
 import { parseCsvContent, downloadDocxFile, downloadPdfFile } from '../../utils/documentServices';
 
 interface CsvToWordConverterProps {
   showToast: (msg: string, type: 'success' | 'info' | 'error') => void;
+  selectedProjectId: string;
+  projects: Project[];
+  onSelectProject: (projectId: string) => void;
+  onSavedToSpreadsheet?: (documentId: string) => void;
 }
 
-export default function CsvToWordConverter({ showToast }: CsvToWordConverterProps) {
-  const [csvText, setCsvText] = useState('');
-  const [parsedCases, setParsedCases] = useState<TestCase[]>([]);
-  const [documentTitle, setDocumentTitle] = useState('My Test Ledger Conversion');
+export default function CsvToWordConverter({ showToast, selectedProjectId, projects, onSelectProject, onSavedToSpreadsheet }: CsvToWordConverterProps) {
+  const [csvText, setCsvText] = useState(() => sessionStorage.getItem('csv_csvText') || '');
+  const [parsedCases, setParsedCases] = useState<TestCase[]>(() => {
+    const saved = sessionStorage.getItem('csv_parsedCases');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [documentTitle, setDocumentTitle] = useState(() => sessionStorage.getItem('csv_documentTitle') || 'My Test Ledger Conversion');
+
+  React.useEffect(() => {
+    sessionStorage.setItem('csv_csvText', csvText);
+    sessionStorage.setItem('csv_parsedCases', JSON.stringify(parsedCases));
+    sessionStorage.setItem('csv_documentTitle', documentTitle);
+  }, [csvText, parsedCases, documentTitle]);
   const [editingCell, setEditingCell] = useState<{ index: number; field: string } | null>(null);
   const [editValue, setEditValue] = useState('');
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
+  
+  // Project selection modal state
+  const [showProjectModal, setShowProjectModal] = useState(false);
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+
+  const requireProject = (action: () => void) => {
+    if (!selectedProjectId) {
+      setPendingAction(() => action);
+      setShowProjectModal(true);
+    } else {
+      action();
+    }
+  };
 
   const handleScreenshotUpload = (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
+    reader.onload = (evt) => {
+      const base64 = evt.target?.result as string;
+      
+      setBrokenImages(prev => {
+        const next = { ...prev };
+        delete next[parsedCases[idx].id];
+        return next;
+      });
+
       setParsedCases(prev => {
         const copy = [...prev];
         copy[idx] = {
@@ -34,7 +67,7 @@ export default function CsvToWordConverter({ showToast }: CsvToWordConverterProp
           screenshots: [{
             id: 'screenshot-' + generateId(),
             test_case_id: copy[idx].id,
-            image_url: dataUrl,
+            image_url: base64,
             created_at: new Date().toISOString()
           }],
           updated_at: new Date().toISOString()
@@ -43,6 +76,9 @@ export default function CsvToWordConverter({ showToast }: CsvToWordConverterProp
       });
     };
     reader.readAsDataURL(file);
+    
+    // Clear the input so the same file can be uploaded again if needed
+    e.target.value = '';
   };
 
   const handleRemoveScreenshot = (idx: number) => {
@@ -59,15 +95,16 @@ export default function CsvToWordConverter({ showToast }: CsvToWordConverterProp
 
   // Handle parsing CSV text
   const handleConvertText = () => {
-    if (!csvText.trim()) {
-      showToast("Please paste CSV content or upload a CSV file first.", "error");
-      return;
-    }
+    requireProject(() => {
+      if (!csvText.trim()) {
+        showToast("Please paste CSV content or upload a CSV file first.", "error");
+        return;
+      }
 
-    try {
-      const parsed = parseCsvContent(csvText);
-      const testCases: TestCase[] = parsed.map((tc, idx) => ({
-        id: 'tc-csv-' + generateId() + '-' + idx,
+      try {
+        const parsed = parseCsvContent(csvText);
+        const testCases: TestCase[] = parsed.map((tc, idx) => ({
+          id: 'tc-csv-' + generateId() + '-' + idx,
         project_id: 'conv-temp',
         document_id: '',
         test_case_no: tc.test_case_no || `TC-${String(idx + 1).padStart(3, '0')}`,
@@ -82,24 +119,26 @@ export default function CsvToWordConverter({ showToast }: CsvToWordConverterProp
         updated_at: new Date().toISOString()
       }));
 
-      setParsedCases(testCases);
-      showToast(`Successfully parsed ${testCases.length} test cases!`, 'success');
-    } catch (err: any) {
-      showToast(err.message || "Failed to parse CSV. Please check formatting headers.", "error");
-    }
+        setParsedCases(testCases);
+        showToast(`Successfully parsed ${testCases.length} test cases!`, 'success');
+      } catch (err: any) {
+        showToast(err.message || "Failed to parse CSV. Please check formatting headers.", "error");
+      }
+    });
   };
 
   // Upload file parsing
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    try {
-      const text = await file.text();
-      setCsvText(text);
-      const parsed = parseCsvContent(text);
-      const testCases: TestCase[] = parsed.map((tc, idx) => ({
-        id: 'tc-csv-' + generateId() + '-' + idx,
+    requireProject(async () => {
+      try {
+        const text = await file.text();
+        setCsvText(text);
+        const parsed = parseCsvContent(text);
+        const testCases: TestCase[] = parsed.map((tc, idx) => ({
+          id: 'tc-csv-' + generateId() + '-' + idx,
         project_id: 'conv-temp',
         document_id: '',
         test_case_no: tc.test_case_no || `TC-${String(idx + 1).padStart(3, '0')}`,
@@ -114,11 +153,15 @@ export default function CsvToWordConverter({ showToast }: CsvToWordConverterProp
         updated_at: new Date().toISOString()
       }));
 
-      setParsedCases(testCases);
-      showToast(`Successfully uploaded and parsed "${file.name}" (${testCases.length} rows)`, 'success');
-    } catch (err: any) {
-      showToast(err.message || "Failed to parse uploaded CSV.", "error");
-    }
+        setParsedCases(testCases);
+        showToast(`Successfully uploaded and parsed "${file.name}" (${testCases.length} rows)`, 'success');
+      } catch (err: any) {
+        showToast(err.message || "Failed to parse uploaded CSV.", "error");
+      }
+    });
+    
+    // Clear input
+    e.target.value = '';
   };
 
   // Inline editing inside preview table
@@ -206,11 +249,80 @@ export default function CsvToWordConverter({ showToast }: CsvToWordConverterProp
 
   // Sample CSV format helper
   const loadSampleCsv = () => {
-    const sample = `Test Case No.,Name,Test Objective,Test Steps,Issues / Blockers,Status (Fixed or Not),Screenshot
+    requireProject(() => {
+      const sample = `Test Case No.,Name,Test Objective,Test Steps,Issues / Blockers,Status (Fixed or Not),Screenshot
 TC-001,User Registration,Verify successful user register flow,"1. Navigate to register screen\r\n2. Enter valid credentials\r\n3. Click Submit",None,Fixed,https://example.com/login.png
 TC-002,Forgotten Password Link,Verify correct trigger of forgot password email link,"1. Click Forgot Password\r\n2. Enter registered email address\r\n3. Check inbox for system reset token",Delay in dispatch,In Progress,screenshots/login.png
 TC-003,Empty Field Lockout,Verify strict frontend validation on required blank fields,"1. Click Submit with blank inputs\r\n2. Verify red alert boxes display under inputs",None,Blocked,`;
-    setCsvText(sample);
+      setCsvText(sample);
+    });
+  };
+
+  const handleSaveToSpreadsheet = () => {
+    if (!selectedProjectId) {
+      showToast("Please select a project first.", "error");
+      return;
+    }
+    if (parsedCases.length === 0) {
+      showToast("No test cases to save.", "error");
+      return;
+    }
+
+    try {
+      // 1. Get existing documents for the active project
+      const existingDocs = getDocuments(selectedProjectId);
+      
+      // 2. Filter documents that match the base title to determine version
+      // E.g., if title is "My Ledger", we look for "My Ledger V0.docx", "My Ledger V1.docx", etc.
+      const baseName = documentTitle.trim() || 'Imported CSV Ledger';
+      
+      // Regex to match exact baseName + space + V + number + .docx
+      const regex = new RegExp(`^${escapeRegExp(baseName)} V(\\d+)\\.docx$`, 'i');
+      
+      let maxVersion = 0;
+      existingDocs.forEach(doc => {
+        const match = doc.name.match(regex);
+        if (match) {
+          const v = parseInt(match[1], 10);
+          if (v > maxVersion) maxVersion = v;
+        }
+      });
+      
+      const newVersion = maxVersion + 1;
+      const newDocName = `${baseName} V${newVersion}.docx`;
+      
+      // 3. Create and save the new document
+      const newDocDraft = {
+        project_id: selectedProjectId,
+        name: newDocName,
+        description: 'Auto-saved from CSV Converter',
+      };
+      
+      const savedDoc = saveDocument(newDocDraft);
+      
+      // 4. Save all test cases linked to this document
+      parsedCases.forEach((tc, idx) => {
+        const savedTc: Partial<TestCase> & { project_id: string; document_id: string } = {
+          ...tc,
+          id: 'tc-' + generateId() + '-' + idx, // generate new fresh ID for storage
+          project_id: selectedProjectId,
+          document_id: savedDoc.id,
+        };
+        saveTestCase(savedTc as TestCase);
+      });
+      
+      showToast(`Successfully saved ${parsedCases.length} test cases to ${newDocName}!`, "success");
+      if (onSavedToSpreadsheet) {
+        onSavedToSpreadsheet(savedDoc.id);
+      }
+    } catch (e: any) {
+      showToast(e.message || "Failed to save to spreadsheet", "error");
+    }
+  };
+
+  // Helper function to escape regex characters
+  const escapeRegExp = (string: string) => {
+    return string.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&'); // $& means the whole matched string
   };
 
   return (
@@ -300,49 +412,104 @@ TC-003,Empty Field Lockout,Verify strict frontend validation on required blank f
         </div>
       </div>
 
+      {/* LIGHTBOX FOR SCREENSHOT */}
       {lightboxImage && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+        <div 
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
           onClick={() => setLightboxImage(null)}
         >
-          <div className="relative max-w-4xl max-h-[90vh] rounded-2xl bg-white p-3 shadow-2xl">
-            <img src={lightboxImage} alt="Screenshot enlarged" className="max-h-[85vh] max-w-full rounded-xl object-contain" />
-            <button
-              onClick={() => setLightboxImage(null)}
-              className="absolute right-2 top-2 rounded-full bg-white/90 px-2.5 py-1 text-xs font-bold text-[#3B2A1D]"
-            >
-              ×
-            </button>
-          </div>
+          <img 
+            src={lightboxImage} 
+            alt="Fullscreen preview" 
+            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+          />
         </div>
       )}
 
-      {/* PREVIEW CONTAINER */}
-      {parsedCases.length > 0 && (
-        <div className="bg-white border border-[#E7D6C4] p-5 rounded-2xl shadow-xs space-y-4 animate-slide-in">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-[#F5EDE4]">
-            <div>
-              <h2 className="text-xs uppercase font-bold text-[#8B5A2B] tracking-wider">Auditable Preview Matrix ({parsedCases.length} Rows)</h2>
-              <p className="text-[11px] text-[#7A6A5A] mt-0.5">Double click cells to edit and fix details before generating the final ledger report.</p>
+      {/* PROJECT SELECTION MODAL */}
+      {showProjectModal && (
+        <div className="fixed inset-0 z-50 bg-[#3B2A1D]/20 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-in-up">
+            <h2 className="text-lg font-bold text-[#3B2A1D] mb-4">Select Target Project</h2>
+            <p className="text-xs text-[#7A6A5A] mb-4">
+              Before generating test cases, please select the project where you want to associate this activity.
+            </p>
+
+            <div className="space-y-2 mb-6 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+              {projects.length === 0 ? (
+                <div className="text-center py-4 text-xs font-semibold text-[#8B5A2B] bg-[#FFF4E8] rounded-xl">
+                  No projects available. Please create one in the sidebar first.
+                </div>
+              ) : (
+                projects.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      onSelectProject(p.id);
+                      setShowProjectModal(false);
+                      if (pendingAction) {
+                        setTimeout(() => pendingAction(), 100);
+                        setPendingAction(null);
+                      }
+                    }}
+                    className="w-full text-left px-4 py-3 rounded-xl border border-[#E7D6C4] hover:bg-[#FFF4E8] hover:border-[#8B5A2B]/40 transition-colors flex justify-between items-center group"
+                  >
+                    <span className="font-bold text-[#3B2A1D] text-sm">{p.project_name}</span>
+                    <ArrowRight className="w-4 h-4 text-[#8B5A2B] opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </button>
+                ))
+              )}
             </div>
 
-            <div className="flex items-center gap-2 ml-auto">
+            <div className="flex justify-end gap-3">
               <button
-                onClick={handleExportWord}
-                className="px-4 py-2 bg-[#8B5A2B] hover:bg-[#A66B37] text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-2 transition-colors cursor-pointer"
+                onClick={() => {
+                  setShowProjectModal(false);
+                  setPendingAction(null);
+                }}
+                className="px-4 py-2 text-xs font-bold text-[#7A6A5A] bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
               >
-                <Download className="w-4 h-4" />
-                Word (.docx)
-              </button>
-              <button
-                onClick={handleExportPdf}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-2 transition-colors cursor-pointer"
-              >
-                <Download className="w-4 h-4" />
-                PDF (.pdf)
+                Cancel
               </button>
             </div>
           </div>
+        </div>
+      )}
+        {parsedCases.length > 0 && (
+          <div className="lg:col-span-3 bg-white border border-[#E7D6C4] p-5 rounded-2xl shadow-xs space-y-4">
+            
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[#E7D6C4] pb-4">
+              <div>
+                <h2 className="text-sm font-bold text-[#3B2A1D] uppercase tracking-wider flex items-center gap-2">
+                  <Table className="w-4 h-4 text-[#8B5A2B]" />
+                  Auditable Preview Matrix ({parsedCases.length} rows)
+                </h2>
+                <p className="text-[11px] text-[#7A6A5A] mt-0.5">Double click cells to edit and fix details before generating the final ledger report.</p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleSaveToSpreadsheet}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FFF4E8] text-[#8B5A2B] font-bold text-xs rounded-xl border border-[#E7D6C4]/60 hover:bg-[#FCECDA] transition-all shadow-xs"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  Save to Spreadsheet
+                </button>
+                <button
+                  onClick={handleExportWord}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#8B5A2B] text-white font-bold text-xs rounded-xl hover:bg-[#6A4420] transition-all shadow-xs"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Word (.docx)
+                </button>
+                <button
+                  onClick={handleExportPdf}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white font-bold text-xs rounded-xl hover:bg-red-700 transition-all shadow-xs"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  PDF (.pdf)
+                </button>
+              </div>
+            </div>
 
           <div className="overflow-x-auto w-full">
             <table className="w-full border-collapse table-fixed text-xs">
@@ -472,9 +639,21 @@ TC-003,Empty Field Lockout,Verify strict frontend validation on required blank f
                       {(() => {
                         const screenshotUrl = tc.screenshots?.[0]?.image_url;
                         const hasBrokenImage = !!(screenshotUrl && brokenImages[tc.id]);
+                        
                         if (!screenshotUrl || hasBrokenImage) {
-                          return <div className="text-[11px] text-[#7A6A5A]">No Screenshot</div>;
+                          return (
+                            <div className="flex flex-col items-start gap-1">
+                              <span className={`text-[10px] ${hasBrokenImage ? 'text-red-400 font-semibold' : 'text-[#7A6A5A]'}`}>
+                                {hasBrokenImage ? 'Invalid Link' : 'No Screenshot'}
+                              </span>
+                              <label className="text-[9px] font-semibold text-[#8B5A2B] cursor-pointer hover:underline border border-[#E7D6C4] border-dashed bg-[#FFF4E8] hover:border-[#8B5A2B] px-2 py-1 rounded-md transition-colors hover:bg-[#FCECDA]">
+                                Upload Image
+                                <input type="file" accept="image/*" className="hidden" onChange={e => handleScreenshotUpload(idx, e)} />
+                              </label>
+                            </div>
+                          );
                         }
+
                         return (
                           <div className="flex flex-col items-start gap-2">
                             <img
@@ -499,17 +678,6 @@ TC-003,Empty Field Lockout,Verify strict frontend validation on required blank f
                           </div>
                         );
                       })()}
-                      {!tc.screenshots?.[0]?.image_url && !brokenImages[tc.id] && (
-                        <div className="flex flex-col items-start gap-2">
-                          <div className="h-20 w-20 rounded-lg border border-dashed border-[#E7D6C4] bg-[#FFF8F2] flex items-center justify-center text-[11px] text-[#7A6A5A]">
-                            No Screenshot
-                          </div>
-                          <label className="text-[10px] font-semibold text-[#8B5A2B] cursor-pointer hover:underline">
-                            Add
-                            <input type="file" accept="image/*" className="hidden" onChange={e => handleScreenshotUpload(idx, e)} />
-                          </label>
-                        </div>
-                      )}
                     </td>
 
                     {/* Action */}

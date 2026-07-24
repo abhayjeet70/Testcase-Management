@@ -3,10 +3,10 @@ import {
   Plus, Copy, Trash2, ArrowUp, ArrowDown, Columns, 
   Search, Image as ImageIcon, ChevronDown, 
   Settings2, Eye, Download, Filter, Check, X, EyeOff, Clipboard,
-  Sparkles, Bold, Italic, List
+  Sparkles, Bold, Italic, List, ImageOff
 } from 'lucide-react';
-import { TestCase, TestCaseStatus, CustomColumn, Screenshot } from '../../types';
-import { generateId } from '../../utils/storage';
+import { TestCase, TestCaseStatus, CustomColumn, Screenshot, TestCaseDocument } from '../../types';
+import { generateId, saveDocument } from '../../utils/storage';
 import { generateTestCaseNo } from '../../utils/testCaseIdGenerator';
 import { getDefaultStatus } from '../../utils/appSettings';
 import { isModKey } from '../../constants/keyboardShortcuts';
@@ -15,6 +15,8 @@ import { findSimilarTitles } from '../../utils/duplicateDetection';
 interface TestCaseTableProps {
   testCases: TestCase[];
   customColumns: CustomColumn[];
+  documents?: TestCaseDocument[];
+  onSelectDocument?: (id: string) => void;
   onSaveTestCase: (tc: TestCase) => void;
   onDeleteTestCase: (id: string) => void;
   onDuplicateTestCase: (id: string) => void;
@@ -43,6 +45,8 @@ export default function TestCaseTable({
   onSelectRow,
   projectId,
   documentId,
+  documents,
+  onSelectDocument,
   highlightTerm = '',
   onExportDocument,
   registerAddRow,
@@ -51,6 +55,28 @@ export default function TestCaseTable({
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [screenshotFilter, setScreenshotFilter] = useState<string>('All'); // All, Has, HasNo
+
+  // Document metadata state
+  const currentDoc = documents?.find(d => d.id === documentId);
+  const [docProjectLink, setDocProjectLink] = useState('');
+  const [docDeveloperAssigned, setDocDeveloperAssigned] = useState('');
+
+  useEffect(() => {
+    if (currentDoc) {
+      setDocProjectLink(currentDoc.project_link || '');
+      setDocDeveloperAssigned(currentDoc.developer_assigned || '');
+    }
+  }, [currentDoc]);
+
+  const handleUpdateDocMetadata = () => {
+    if (currentDoc) {
+      saveDocument({
+        ...currentDoc,
+        project_link: docProjectLink,
+        developer_assigned: docDeveloperAssigned
+      });
+    }
+  };
 
   // Excel-like floating context menu state
   const [contextMenu, setContextMenu] = useState<{ rowId: string; x: number; y: number } | null>(null);
@@ -88,6 +114,8 @@ export default function TestCaseTable({
   const [lightboxDrag, setLightboxDrag] = useState({ dragging: false, startX: 0, startY: 0, offsetX: 0, offsetY: 0 });
   const [lightboxOffset, setLightboxOffset] = useState({ x: 0, y: 0 });
   const lightboxImgRef = React.useRef<HTMLImageElement>(null);
+  
+  const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
 
   const openLightbox = (url: string) => {
     setLightboxImage(url);
@@ -539,32 +567,37 @@ export default function TestCaseTable({
   // Paste Screenshot Handler
   const handlePasteScreenshot = (e: React.ClipboardEvent, tcId: string) => {
     const items = e.clipboardData?.items;
-    if (!items) return;
-
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.startsWith('image/')) {
-        const file = items[i].getAsFile();
-        if (file) {
-          const reader = new FileReader();
-          reader.onload = (evt) => {
-            const base64Url = evt.target?.result as string;
-            const newScreenshot: Screenshot = {
-              id: generateId(),
-              test_case_id: tcId,
-              image_url: base64Url,
-              created_at: new Date().toISOString()
-            };
-            const original = testCases.find(tc => tc.id === tcId);
-            if (original) {
-              const updated = {
-                ...original,
-                screenshots: [...(original.screenshots || []), newScreenshot]
+    if (items) {
+      for (const item of Array.from(items)) {
+        if (item.type.indexOf('image') !== -1) {
+          const file = item.getAsFile();
+          if (file) {
+            setBrokenImages(prev => {
+              const next = { ...prev };
+              delete next[tcId];
+              return next;
+            });
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+              const base64Url = evt.target?.result as string;
+              const newScreenshot: Screenshot = {
+                id: generateId(),
+                test_case_id: tcId,
+                image_url: base64Url,
+                created_at: new Date().toISOString()
               };
-              onSaveTestCase(updated);
-              setSaveStatus('Saved');
-            }
-          };
-          reader.readAsDataURL(file);
+              const original = testCases.find(tc => tc.id === tcId);
+              if (original) {
+                const updated = {
+                  ...original,
+                  screenshots: [...(original.screenshots || []), newScreenshot]
+                };
+                onSaveTestCase(updated);
+                setSaveStatus('Saved');
+              }
+            };
+            reader.readAsDataURL(file);
+          }
         }
       }
     }
@@ -578,7 +611,12 @@ export default function TestCaseTable({
   const handleDropScreenshot = (e: React.DragEvent, tcId: string) => {
     e.preventDefault();
     const files = e.dataTransfer?.files;
-    if (files && files.length > 0 && files[0].type.startsWith('image/')) {
+    if (files && files.length > 0) {
+      setBrokenImages(prev => {
+        const next = { ...prev };
+        delete next[tcId];
+        return next;
+      });
       const file = files[0];
       const reader = new FileReader();
       reader.onload = (evt) => {
@@ -606,6 +644,11 @@ export default function TestCaseTable({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, tcId: string) => {
     const files = e.target.files;
     if (files && files.length > 0) {
+      setBrokenImages(prev => {
+        const next = { ...prev };
+        delete next[tcId];
+        return next;
+      });
       const reader = new FileReader();
       reader.onload = (evt) => {
         const base64Url = evt.target?.result as string;
@@ -631,6 +674,11 @@ export default function TestCaseTable({
 
   const deleteScreenshot = (tcId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    setBrokenImages(prev => {
+      const next = { ...prev };
+      delete next[tcId];
+      return next;
+    });
     const original = testCases.find(tc => tc.id === tcId);
     if (original) {
       const updated = {
@@ -654,6 +702,77 @@ export default function TestCaseTable({
         
         {/* SEARCH AND FILTERS */}
         <div className="flex flex-wrap items-center gap-3 flex-1">
+          {documents && documents.length > 0 && onSelectDocument && (
+            <div className="flex items-center gap-3 shrink-0 mr-2">
+              {(() => {
+                const currentDoc = documents.find(d => d.id === documentId);
+                const docName = currentDoc?.name || '';
+                const versionMatch = docName.match(/(.*?) V(\d+)\.docx$/i);
+                
+                if (versionMatch) {
+                  const baseName = versionMatch[1];
+                  const currentVersion = versionMatch[2];
+                  // Find all versions of this base document
+                  const versionDocs = documents
+                    .filter(d => d.name.startsWith(baseName))
+                    .sort((a, b) => {
+                      const m1 = a.name.match(/V(\d+)\.docx$/i);
+                      const m2 = b.name.match(/V(\d+)\.docx$/i);
+                      return (m1 ? parseInt(m1[1]) : 0) - (m2 ? parseInt(m2[1]) : 0);
+                    });
+                  
+                  return (
+                    <div className="flex items-center gap-3">
+                      <div className="text-xs flex items-center gap-2">
+                        <span className="text-[#7A6A5A] font-medium whitespace-nowrap">Project Link: </span>
+                        <input 
+                          type="text" 
+                          value={docProjectLink}
+                          onChange={(e) => setDocProjectLink(e.target.value)}
+                          onBlur={handleUpdateDocMetadata}
+                          placeholder="e.g. Jira/Notion link..."
+                          className="border border-[#E7D6C4] bg-white rounded px-2 py-0.5 focus:ring-1 focus:ring-[#8B5A2B] outline-none text-[#3B2A1D] w-36"
+                        />
+                      </div>
+                      <div className="text-xs flex items-center gap-2">
+                        <span className="text-[#7A6A5A] font-medium whitespace-nowrap">Developer: </span>
+                        <input 
+                          type="text" 
+                          value={docDeveloperAssigned}
+                          onChange={(e) => setDocDeveloperAssigned(e.target.value)}
+                          onBlur={handleUpdateDocMetadata}
+                          placeholder="Assign to..."
+                          className="border border-[#E7D6C4] bg-white rounded px-2 py-0.5 focus:ring-1 focus:ring-[#8B5A2B] outline-none text-[#3B2A1D] w-28"
+                        />
+                      </div>
+                      <div className="text-xs ml-2">
+                        <span className="text-[#7A6A5A] font-medium">Version No: </span>
+                        <span className="font-bold text-[#8B5A2B] bg-[#FFF4E8] px-1.5 py-0.5 rounded">V{currentVersion}</span>
+                      </div>
+                      <select
+                        value={documentId}
+                        onChange={(e) => onSelectDocument(e.target.value)}
+                        className="text-xs border border-[#E7D6C4] bg-white rounded-lg px-2 py-1 focus:ring-1 focus:ring-[#8B5A2B] outline-none cursor-pointer"
+                        title="Sort / switch version wise"
+                      >
+                        <option value="" disabled>Select Version</option>
+                        {versionDocs.map(doc => {
+                          const vMatch = doc.name.match(/V(\d+)\.docx$/i);
+                          const v = vMatch ? `V${vMatch[1]}` : doc.name;
+                          return (
+                            <option key={doc.id} value={doc.id}>
+                              {v}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+            </div>
+          )}
           <div className="relative flex-1 min-w-[240px] max-w-md">
             <Search className="w-4 h-4 text-[#7A6A5A] absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
@@ -1163,13 +1282,14 @@ export default function TestCaseTable({
                         onDrop={(e) => handleDropScreenshot(e, tc.id)}
                         onClick={e => e.stopPropagation()}
                       >
-                        {tc.screenshots && tc.screenshots.length > 0 ? (
+                        {tc.screenshots && tc.screenshots.length > 0 && !brokenImages[tc.id] ? (
                           <div className="relative inline-block group/thumb">
                             <img
                               src={tc.screenshots[0].image_url}
                               alt="thumbnail"
+                              onError={() => setBrokenImages(prev => ({ ...prev, [tc.id]: true }))}
                               onClick={() => setLightboxImage(tc.screenshots[0].image_url)}
-                              className="w-14 h-10 object-cover rounded-lg border border-[#E7D6C4] mx-auto shadow-2xs group-hover/thumb:scale-105 transition-transform cursor-zoom-in"
+                              className="w-14 h-10 object-cover rounded-lg border border-[#E7D6C4] mx-auto shadow-2xs group-hover/thumb:scale-105 transition-transform cursor-zoom-in bg-[#FFF8F2]"
                             />
                             {/* Floating controls */}
                             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/thumb:opacity-100 rounded-lg flex items-center justify-center gap-1 transition-opacity">
@@ -1193,7 +1313,7 @@ export default function TestCaseTable({
                                 className="p-0.5 hover:bg-white/20 rounded text-red-400" 
                                 title="Delete"
                               >
-                                <X className="w-3.5 h-3.5" />
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
                             <span className="absolute -top-1.5 -right-1.5 bg-[#8B5A2B] text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
@@ -1210,8 +1330,14 @@ export default function TestCaseTable({
                               title="Upload or Drag-and-drop Image here"
                             />
                             <div className="py-1 text-[9px] text-[#7A6A5A]/70 font-semibold flex flex-col items-center justify-center gap-0.5">
-                              <ImageIcon className="w-4 h-4 text-[#7A6A5A]/50 group-hover/no-img:text-[#8B5A2B]" />
-                              <span>Drop/Paste</span>
+                              {brokenImages[tc.id] ? (
+                                <ImageOff className="w-4 h-4 text-red-400/50 group-hover/no-img:text-red-400" />
+                              ) : (
+                                <ImageIcon className="w-4 h-4 text-[#7A6A5A]/50 group-hover/no-img:text-[#8B5A2B]" />
+                              )}
+                              <span className={brokenImages[tc.id] ? "text-red-400" : ""}>
+                                {brokenImages[tc.id] ? "Invalid Link" : "Upload"}
+                              </span>
                             </div>
                           </div>
                         )}

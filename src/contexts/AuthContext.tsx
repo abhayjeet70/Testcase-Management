@@ -7,6 +7,8 @@ interface AuthContextType {
   login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
   register: (email: string, password: string, name: string, role: UserRole) => Promise<{ success: boolean; error?: string }>;
   adminCreateUser: (email: string, password: string, name: string, role: UserRole) => Promise<{ success: boolean; error?: string }>;
+  adminUpdateUser: (id: string, name: string, role: UserRole) => Promise<{ success: boolean; error?: string }>;
+  adminDeleteUser: (id: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   isAuthenticated: boolean;
   users: User[]; // Keep this to simulate a loaded "directory" of all users for dropdowns
@@ -39,7 +41,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Load cached users (includes any admin-created users)
     const cachedUsers = loadUsersFromCache();
     
-    if (data && !error && data.length > 0) {
+    if (data && !error) {
+      // 1. Map any users already in the DB
       const formattedUsers: User[] = data.map((p: any) => ({
         id: p.id,
         name: p.name || p.email?.split('@')[0] || 'Unknown',
@@ -48,14 +51,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         createdAt: p.created_at,
         isActive: true,
       }));
-      // Merge: include cached users that are not yet in the profiles table
+
+      // 2. See if there are users in local cache that ARE NOT in Supabase
       const mergedIds = new Set(formattedUsers.map(u => u.id));
       const extraCached = cachedUsers.filter(u => !mergedIds.has(u.id));
+
+      if (extraCached.length > 0) {
+        console.log("Migrating cached users up to Supabase profiles...", extraCached);
+        // Push them to DB so they sync everywhere
+        for (const u of extraCached) {
+          await supabase.from('profiles').upsert([{
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            role: u.role
+          }], { onConflict: 'id' });
+        }
+      }
+
       const merged = [...formattedUsers, ...extraCached];
       saveUsersToCache(merged);
       setUsers(merged);
     } else {
-      // Fallback to cache if RLS blocks the query
+      // Fallback to cache if RLS blocks the query or table missing
       if (cachedUsers.length > 0) {
         setUsers(cachedUsers);
       }
@@ -234,6 +252,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const adminUpdateUser = async (id: string, name: string, role: UserRole): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { error } = await supabase.from('profiles').update({ name, role }).eq('id', id);
+      if (error) {
+        console.warn('Profile update failed:', error.message);
+      }
+      
+      // Update local state and cache regardless of Supabase success (for UI demo)
+      const existing = loadUsersFromCache();
+      const updated = existing.map(u => u.id === id ? { ...u, name, role } : u);
+      saveUsersToCache(updated);
+      
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, name, role } : u));
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  const adminDeleteUser = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { error } = await supabase.from('profiles').delete().eq('id', id);
+      if (error) {
+        console.warn('Profile delete failed:', error.message);
+      }
+      
+      // Update local state and cache regardless of Supabase success (for UI demo)
+      const existing = loadUsersFromCache();
+      const updated = existing.filter(u => u.id !== id);
+      saveUsersToCache(updated);
+      
+      setUsers(prev => prev.filter(u => u.id !== id));
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  };
+
   const logout = async () => {
     await supabase.auth.signOut();
   };
@@ -243,7 +299,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ currentUser, login, register, adminCreateUser, logout, isAuthenticated: !!currentUser, users }}>
+    <AuthContext.Provider value={{ currentUser, login, register, adminCreateUser, adminUpdateUser, adminDeleteUser, logout, isAuthenticated: !!currentUser, users }}>
       {children}
     </AuthContext.Provider>
   );

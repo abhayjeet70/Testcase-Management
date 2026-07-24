@@ -107,6 +107,8 @@ export default function LoginPage() {
                         <UserIcon className="h-5 w-5 text-[#7A6A5A]/60" />
                       </div>
                       <input
+                        id="fullName"
+                        name="fullName"
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
@@ -120,6 +122,8 @@ export default function LoginPage() {
                   <div>
                     <label className="block text-sm font-semibold text-[#7A6A5A] mb-1.5">Platform Role</label>
                     <select
+                      id="role"
+                      name="role"
                       value={role}
                       onChange={(e) => setRole(e.target.value as UserRole)}
                       className="block w-full pl-3 pr-10 py-2.5 bg-white border border-[#E7D6C4] rounded-xl text-[#3B2A1D] focus:outline-none focus:ring-2 focus:ring-[#8B5A2B]/50 focus:border-[#8B5A2B] transition-all appearance-none cursor-pointer"
@@ -142,6 +146,8 @@ export default function LoginPage() {
                   <Mail className="h-5 w-5 text-[#7A6A5A]/60" />
                 </div>
                 <input
+                  id="email"
+                  name="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -159,6 +165,8 @@ export default function LoginPage() {
                   <Lock className="h-5 w-5 text-[#7A6A5A]/60" />
                 </div>
                 <input
+                  id="password"
+                  name="password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

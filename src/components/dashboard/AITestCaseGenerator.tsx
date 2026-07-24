@@ -30,8 +30,8 @@ export default function AITestCaseGenerator({
   onImportGenerated,
   showToast
 }: AITestCaseGeneratorProps) {
-  const [requirements, setRequirements] = useState('');
-  const [context, setContext] = useState('');
+  const [requirements, setRequirements] = useState(() => sessionStorage.getItem('ai_requirements') || '');
+  const [context, setContext] = useState(() => sessionStorage.getItem('ai_context') || '');
   const [targetProjectId, setTargetProjectId] = useState(selectedProjectId || (projects[0]?.id || ''));
   const [targetDocumentId, setTargetDocumentId] = useState(() => {
     const projId = selectedProjectId || (projects[0]?.id || '');
@@ -41,7 +41,16 @@ export default function AITestCaseGenerator({
   
   const [loading, setLoading] = useState(false);
   const [loadingPhaseIndex, setLoadingPhaseIndex] = useState(0);
-  const [generatedCases, setGeneratedCases] = useState<TestCase[]>([]);
+  const [generatedCases, setGeneratedCases] = useState<TestCase[]>(() => {
+    const saved = sessionStorage.getItem('ai_generatedCases');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  React.useEffect(() => {
+    sessionStorage.setItem('ai_requirements', requirements);
+    sessionStorage.setItem('ai_context', context);
+    sessionStorage.setItem('ai_generatedCases', JSON.stringify(generatedCases));
+  }, [requirements, context, generatedCases]);
   const [selectedGeneratedRowId, setSelectedGeneratedRowId] = useState<string | null>(null);
 
   // Auto-fill template options

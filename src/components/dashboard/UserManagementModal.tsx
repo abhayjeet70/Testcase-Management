@@ -1,21 +1,22 @@
 import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
 import { X, UserPlus, Mail, Lock, Shield, User as UserIcon } from 'lucide-react';
-import { UserRole } from '../../types';
+import { User, UserRole } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface UserManagementModalProps {
+  editingUser?: User | null;
   onClose: () => void;
   showToast: (message: string, type: 'success' | 'error') => void;
 }
 
-export default function UserManagementModal({ onClose, showToast }: UserManagementModalProps) {
-  const { adminCreateUser } = useAuth();
+export default function UserManagementModal({ editingUser, onClose, showToast }: UserManagementModalProps) {
+  const { adminCreateUser, adminUpdateUser } = useAuth();
   
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [name, setName] = useState(editingUser?.name || '');
+  const [email, setEmail] = useState(editingUser?.email || '');
   const [password, setPassword] = useState('Welcome@123');
-  const [role, setRole] = useState<UserRole>('tester');
+  const [role, setRole] = useState<UserRole>(editingUser?.role || 'tester');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState('');
 
@@ -26,20 +27,31 @@ export default function UserManagementModal({ onClose, showToast }: UserManageme
       setLocalError('All fields are required.');
       return;
     }
-    if (password.length < 6) {
+    if (!editingUser && password.length < 6) {
       setLocalError('Password must be at least 6 characters.');
       return;
     }
     
     setIsSubmitting(true);
-    const { success, error } = await adminCreateUser(email.trim(), password, name.trim(), role);
+    let success = false;
+    let error = '';
+
+    if (editingUser) {
+      const res = await adminUpdateUser(editingUser.id, name.trim(), role);
+      success = res.success;
+      error = res.error || '';
+    } else {
+      const res = await adminCreateUser(email.trim(), password, name.trim(), role);
+      success = res.success;
+      error = res.error || '';
+    }
     setIsSubmitting(false);
 
     if (success) {
-      showToast(`✓ ${name} has been added to the platform!`, 'success');
+      showToast(`✓ ${name} has been ${editingUser ? 'updated' : 'added'}!`, 'success');
       onClose();
     } else {
-      setLocalError(error || 'Failed to create user. They might already exist.');
+      setLocalError(error || `Failed to ${editingUser ? 'update' : 'create'} user.`);
     }
   };
 
@@ -59,9 +71,11 @@ export default function UserManagementModal({ onClose, showToast }: UserManageme
           <div>
             <h2 className="text-lg font-bold text-[#3B2A1D] flex items-center gap-2">
               <UserPlus className="w-5 h-5 text-[#8B5A2B]" />
-              Add New Team Member
+              {editingUser ? 'Edit Team Member' : 'Add New Team Member'}
             </h2>
-            <p className="text-xs text-[#7A6A5A] mt-1">Set login credentials for employees, interns, testers, etc.</p>
+            <p className="text-xs text-[#7A6A5A] mt-1">
+              {editingUser ? 'Update member details and access level.' : 'Set login credentials for employees, interns, testers, etc.'}
+            </p>
           </div>
           <button 
             onClick={onClose}
@@ -105,28 +119,32 @@ export default function UserManagementModal({ onClose, showToast }: UserManageme
                 required
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 bg-white border border-[#E7D6C4] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8B5A2B]/25 focus:border-[#8B5A2B] transition-all text-sm"
+                disabled={!!editingUser}
+                className={`w-full pl-9 pr-4 py-2.5 border border-[#E7D6C4] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8B5A2B]/25 focus:border-[#8B5A2B] transition-all text-sm ${editingUser ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-white'}`}
                 placeholder="priya@company.com"
               />
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A0A0A0]" />
             </div>
+            {editingUser && <p className="text-[10px] text-[#7A6A5A] mt-1">Email address cannot be changed.</p>}
           </div>
 
           {/* Password */}
-          <div>
-            <label className="block text-xs font-bold text-[#3B2A1D] mb-1.5">Password</label>
-            <div className="relative">
-              <input
-                type="text"
-                required
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 bg-white border border-[#E7D6C4] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8B5A2B]/25 focus:border-[#8B5A2B] transition-all text-sm font-mono"
-              />
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A0A0A0]" />
+          {!editingUser && (
+            <div>
+              <label className="block text-xs font-bold text-[#3B2A1D] mb-1.5">Password</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2.5 bg-white border border-[#E7D6C4] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8B5A2B]/25 focus:border-[#8B5A2B] transition-all text-sm font-mono"
+                />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A0A0A0]" />
+              </div>
+              <p className="text-[10px] text-[#7A6A5A] mt-1">Min. 6 characters. Share this with the user so they can log in.</p>
             </div>
-            <p className="text-[10px] text-[#7A6A5A] mt-1">Min. 6 characters. Share this with the user so they can log in.</p>
-          </div>
+          )}
 
           {/* Role */}
           <div>
@@ -164,12 +182,12 @@ export default function UserManagementModal({ onClose, showToast }: UserManageme
               {isSubmitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Creating account...
+                  {editingUser ? 'Updating...' : 'Creating account...'}
                 </>
               ) : (
                 <>
                   <UserPlus className="w-4 h-4" />
-                  Add Member
+                  {editingUser ? 'Save Changes' : 'Add Member'}
                 </>
               )}
             </button>

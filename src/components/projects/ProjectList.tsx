@@ -96,7 +96,7 @@ export default function ProjectList({
 
   // Filter projects based on search
   const filteredProjects = projects.filter(p => 
-    p.project_name.toLowerCase().includes(projSearch.toLowerCase()) && !p.archived
+    (p.project_name || '').toLowerCase().includes((projSearch || '').toLowerCase()) && !p.archived
   );
 
   const handleCreate = (e: React.FormEvent) => {

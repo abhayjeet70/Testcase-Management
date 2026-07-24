@@ -629,6 +629,7 @@ function createHeaderCell(text: string, pctWidth: number) {
 }
 
 function createCell(text: string, bold: boolean = false, center: boolean = false, textHexColor?: string) {
+  const lines = text ? text.split('\n') : [''];
   return new TableCell({
     margins: {
       top: 100,
@@ -644,15 +645,14 @@ function createCell(text: string, bold: boolean = false, center: boolean = false
     },
     children: [
       new Paragraph({
-        children: [
-          new TextRun({
-            text: text,
-            bold,
-            font: 'Inter',
-            size: 16,
-            color: textHexColor
-          })
-        ],
+        children: lines.map((line, i) => new TextRun({
+          text: line,
+          break: i > 0 ? 1 : 0,
+          bold,
+          font: 'Inter',
+          size: 16,
+          color: textHexColor
+        })),
         alignment: center ? AlignmentType.CENTER : AlignmentType.LEFT
       })
     ]

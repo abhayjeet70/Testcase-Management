@@ -49,7 +49,10 @@ export default function AdminDashboard({
   }, []);
 
   // Query ALL test cases and ALL logs for fully accurate global dashboard metrics
-  const allTestCases = projects.flatMap(p => getTestCases(p.id));
+  const allTestCases = projects.flatMap(p => {
+    const docs = getDocuments(p.id);
+    return docs.flatMap(d => getTestCases(d.id));
+  });
   const allLogs = projects.flatMap(p => getActivityLogs(p.id)).sort((a, b) => 
     new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
@@ -77,10 +80,12 @@ export default function AdminDashboard({
 
   // Bar chart data (Test Cases per project)
   const projectBreakdown = projects.map(proj => {
-    const count = getTestCases(proj.id).length;
-    const docCount = getDocuments(proj.id).length;
+    const docs = getDocuments(proj.id);
+    const count = docs.reduce((sum, doc) => sum + getTestCases(doc.id).length, 0);
+    const docCount = docs.length;
+    const projName = proj.project_name || 'Untitled';
     return {
-      name: proj.project_name.length > 15 ? proj.project_name.substring(0, 15) + '...' : proj.project_name,
+      name: projName.length > 15 ? projName.substring(0, 15) + '...' : projName,
       'Test Cases': count,
       'Document Files': docCount,
       id: proj.id
@@ -197,7 +202,7 @@ export default function AdminDashboard({
   // Compile dynamic Document structure from active projects list
   const recentDocuments = projects.map(proj => {
     const projCases = getTestCases(proj.id);
-    const docName = `${proj.project_name.replace(/\s+/g, '_')}_Defect.docx`;
+    const docName = `${(proj.project_name || 'Untitled').replace(/\s+/g, '_')}_Defect.docx`;
 
     let latestTime = proj.updated_at;
     projCases.forEach(tc => {
@@ -220,7 +225,7 @@ export default function AdminDashboard({
 
     return {
       id: proj.id,
-      projectName: proj.project_name,
+      projectName: proj.project_name || 'Untitled',
       documentName: docName,
       createdDate: formatDateOnly(proj.created_at),
       lastModified: formatDateOnly(latestTime),
