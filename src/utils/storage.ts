@@ -337,6 +337,11 @@ export const saveProject = (project: Partial<Project> & { project_name: string }
       id: 'proj-' + generateId(),
       project_name: project.project_name,
       description: project.description || '',
+      version: project.version || '',
+      developer: project.developer || '',
+      vercel_link: project.vercel_link || '',
+      zip_file_name: project.zip_file_name || '',
+      zip_file_data: project.zip_file_data || '',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       archived: false,
@@ -346,7 +351,17 @@ export const saveProject = (project: Partial<Project> & { project_name: string }
     savedProject = newProject;
   }
 
-  localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
+  // Prevent QuotaExceededError by omitting large zip_file_data from localStorage
+  const projectsForLocal = projects.map(p => {
+    const { zip_file_data, ...rest } = p;
+    return rest as Project;
+  });
+
+  try {
+    localStorage.setItem(PROJECTS_KEY, JSON.stringify(projectsForLocal));
+  } catch (e) {
+    console.error("Local storage quota exceeded, unable to save project locally:", e);
+  }
   addActivityLog(savedProject.id, `Project "${savedProject.project_name}" ${project.id ? 'updated' : 'created'}`);
   
   upsertRecord('tc_projects', savedProject);
@@ -502,7 +517,44 @@ export const saveDocument = (doc: Partial<TestCaseDocument> & { project_id: stri
   addActivityLog(savedDoc.project_id, `Created/Updated Test Case File "${savedDoc.name}"`);
   
   upsertRecord('tc_documents', savedDoc);
-  
+
+  // Sync document metadata (developer, link) and highest version up to the parent project
+  const projects = getProjects();
+  const parentProject = projects.find(p => p.id === savedDoc.project_id);
+  if (parentProject) {
+    let updated = false;
+    
+    if (savedDoc.developer_assigned && savedDoc.developer_assigned !== parentProject.developer) {
+      parentProject.developer = savedDoc.developer_assigned;
+      updated = true;
+    }
+    
+    if (savedDoc.project_link && savedDoc.project_link !== parentProject.vercel_link) {
+      parentProject.vercel_link = savedDoc.project_link;
+      updated = true;
+    }
+    
+    const projectDocs = docs.filter(d => d.project_id === parentProject.id);
+    let maxVersion = 0;
+    projectDocs.forEach(d => {
+      const match = d.name.match(/V(\d+)/i);
+      if (match) {
+        const v = parseInt(match[1], 10);
+        if (v > maxVersion) maxVersion = v;
+      }
+    });
+    
+    const highestVersionStr = maxVersion > 0 ? `v${maxVersion}` : parentProject.version;
+    if (highestVersionStr && highestVersionStr !== parentProject.version) {
+      parentProject.version = highestVersionStr;
+      updated = true;
+    }
+    
+    if (updated) {
+      saveProject(parentProject as any);
+    }
+  }
+
   return savedDoc;
 };
 

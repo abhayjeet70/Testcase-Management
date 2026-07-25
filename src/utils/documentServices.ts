@@ -156,38 +156,71 @@ export async function parseDocxFile(file: File): Promise<Partial<TestCase>[]> {
 // --- CSV IMPORT (.csv) ---
 export function parseCsvContent(text: string): Partial<TestCase>[] {
   const lines: string[][] = [];
-  let currentLine: string[] = [];
-  let insideQuote = false;
-  let currentToken = '';
+  const first5Lines = text.split(/\r?\n/).slice(0, 5);
+  const maxTabs = Math.max(...first5Lines.map(l => l.split('\t').length));
+  const maxCommas = Math.max(...first5Lines.map(l => l.split(',').length));
+  const isTsv = maxTabs > 1 && maxTabs > maxCommas;
 
-  // Clean raw char parser to respect quotes and newlines in textareas!
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    const nextChar = text[i + 1];
-
-    if (char === '"') {
-      if (insideQuote && nextChar === '"') {
-        currentToken += '"';
-        i++; // skip next quote
+  if (isTsv) {
+    const rawLines = text.split(/\r?\n/);
+    const expectedCols = maxTabs;
+    let currentRow: string[] = [];
+    
+    for (const line of rawLines) {
+      if (!line.trim() && currentRow.length === 0) continue;
+      const parts = line.split('\t');
+      
+      if (currentRow.length === 0) {
+        currentRow = [...parts];
       } else {
-        insideQuote = !insideQuote;
+        const lastIndex = currentRow.length - 1;
+        currentRow[lastIndex] += '\n' + parts[0];
+        for (let i = 1; i < parts.length; i++) {
+          currentRow.push(parts[i]);
+        }
       }
-    } else if (char === ',' && !insideQuote) {
-      currentLine.push(currentToken.trim());
-      currentToken = '';
-    } else if ((char === '\r' || char === '\n') && !insideQuote) {
-      if (char === '\r' && nextChar === '\n') i++; // handle windows crlf
+      
+      if (currentRow.length >= expectedCols) {
+        lines.push(currentRow.map(c => c.trim().replace(/^"|"$/g, '').trim()));
+        currentRow = [];
+      }
+    }
+    if (currentRow.length > 0) {
+      lines.push(currentRow.map(c => c.trim().replace(/^"|"$/g, '').trim()));
+    }
+  } else {
+    let currentLine: string[] = [];
+    let insideQuote = false;
+    let currentToken = '';
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      const nextChar = text[i + 1];
+
+      if (char === '"') {
+        if (insideQuote && nextChar === '"') {
+          currentToken += '"';
+          i++; // skip next quote
+        } else {
+          insideQuote = !insideQuote;
+        }
+      } else if (char === ',' && !insideQuote) {
+        currentLine.push(currentToken.trim());
+        currentToken = '';
+      } else if ((char === '\r' || char === '\n') && !insideQuote) {
+        if (char === '\r' && nextChar === '\n') i++; // handle windows crlf
+        currentLine.push(currentToken.trim());
+        lines.push(currentLine);
+        currentLine = [];
+        currentToken = '';
+      } else {
+        currentToken += char;
+      }
+    }
+    if (currentToken || currentLine.length > 0) {
       currentLine.push(currentToken.trim());
       lines.push(currentLine);
-      currentLine = [];
-      currentToken = '';
-    } else {
-      currentToken += char;
     }
-  }
-  if (currentToken || currentLine.length > 0) {
-    currentLine.push(currentToken.trim());
-    lines.push(currentLine);
   }
 
   if (lines.length < 2) {

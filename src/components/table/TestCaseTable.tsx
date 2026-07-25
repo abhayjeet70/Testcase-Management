@@ -6,7 +6,7 @@ import {
   Sparkles, Bold, Italic, List, ImageOff
 } from 'lucide-react';
 import { TestCase, TestCaseStatus, CustomColumn, Screenshot, TestCaseDocument } from '../../types';
-import { generateId, saveDocument } from '../../utils/storage';
+import { generateId, saveDocument, getProjects } from '../../utils/storage';
 import { generateTestCaseNo } from '../../utils/testCaseIdGenerator';
 import { getDefaultStatus } from '../../utils/appSettings';
 import { isModKey } from '../../constants/keyboardShortcuts';
@@ -63,10 +63,13 @@ export default function TestCaseTable({
 
   useEffect(() => {
     if (currentDoc) {
-      setDocProjectLink(currentDoc.project_link || '');
-      setDocDeveloperAssigned(currentDoc.developer_assigned || '');
+      const projects = getProjects();
+      const parentProj = projects.find(p => p.id === projectId);
+      
+      setDocProjectLink(currentDoc.project_link || parentProj?.vercel_link || '');
+      setDocDeveloperAssigned(currentDoc.developer_assigned || parentProj?.developer || '');
     }
-  }, [currentDoc]);
+  }, [currentDoc, projectId]);
 
   const handleUpdateDocMetadata = () => {
     if (currentDoc) {

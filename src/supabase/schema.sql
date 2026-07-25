@@ -13,7 +13,12 @@ CREATE TABLE IF NOT EXISTS public.tc_projects (
     archived_at TIMESTAMPTZ,
     favorite BOOLEAN DEFAULT FALSE,
     pinned BOOLEAN DEFAULT FALSE,
-    pinned_at TIMESTAMPTZ
+    pinned_at TIMESTAMPTZ,
+    version TEXT,
+    developer TEXT,
+    vercel_link TEXT,
+    zip_file_name TEXT,
+    zip_file_data TEXT
 );
 
 -- 2. Modules Table

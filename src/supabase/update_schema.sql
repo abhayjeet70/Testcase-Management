@@ -13,3 +13,11 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 -- Allow authenticated users to read and update profiles
 CREATE POLICY "Allow authenticated full access to profiles" ON public.profiles FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Add new columns to tc_projects
+ALTER TABLE public.tc_projects 
+ADD COLUMN IF NOT EXISTS version TEXT,
+ADD COLUMN IF NOT EXISTS developer TEXT,
+ADD COLUMN IF NOT EXISTS vercel_link TEXT,
+ADD COLUMN IF NOT EXISTS zip_file_name TEXT,
+ADD COLUMN IF NOT EXISTS zip_file_data TEXT;

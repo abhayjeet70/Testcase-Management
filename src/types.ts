@@ -10,6 +10,11 @@ export interface Project {
   id: string;
   project_name: string;
   description?: string;
+  version?: string;
+  developer?: string;
+  vercel_link?: string;
+  zip_file_name?: string;
+  zip_file_data?: string;
   id_prefix?: string;
   created_at: string;
   updated_at: string;

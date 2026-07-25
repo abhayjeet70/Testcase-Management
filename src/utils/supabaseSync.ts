@@ -76,7 +76,11 @@ export const hydrateFromSupabase = async (): Promise<boolean> => {
     }
 
     if (projects) {
-      writeLocal(PROJECTS_KEY, projects);
+      const projectsForLocal = projects.map((p: any) => {
+        const { zip_file_data, ...rest } = p;
+        return rest;
+      });
+      writeLocal(PROJECTS_KEY, projectsForLocal);
     }
     if (modules) writeLocal(MODULES_KEY, modules);
     if (documents) {
