@@ -3,10 +3,10 @@ import {
   Plus, Copy, Trash2, ArrowUp, ArrowDown, Columns, 
   Search, Image as ImageIcon, ChevronDown, 
   Settings2, Eye, Download, Filter, Check, X, EyeOff, Clipboard,
-  Sparkles, Bold, Italic, List, ImageOff
+  Sparkles, Bold, Italic, List, ImageOff, Upload
 } from 'lucide-react';
 import { TestCase, TestCaseStatus, CustomColumn, Screenshot, TestCaseDocument } from '../../types';
-import { generateId, saveDocument, getProjects } from '../../utils/storage';
+import { generateId, saveDocument, getProjects, saveProject } from '../../utils/storage';
 import { generateTestCaseNo } from '../../utils/testCaseIdGenerator';
 import { getDefaultStatus } from '../../utils/appSettings';
 import { isModKey } from '../../constants/keyboardShortcuts';
@@ -60,6 +60,8 @@ export default function TestCaseTable({
   const currentDoc = documents?.find(d => d.id === documentId);
   const [docProjectLink, setDocProjectLink] = useState('');
   const [docDeveloperAssigned, setDocDeveloperAssigned] = useState('');
+  const [docZipFileName, setDocZipFileName] = useState('');
+  const [docZipFileData, setDocZipFileData] = useState('');
 
   useEffect(() => {
     if (currentDoc) {
@@ -68,8 +70,44 @@ export default function TestCaseTable({
       
       setDocProjectLink(currentDoc.project_link || parentProj?.vercel_link || '');
       setDocDeveloperAssigned(currentDoc.developer_assigned || parentProj?.developer || '');
+      setDocZipFileName(parentProj?.zip_file_name || '');
+      setDocZipFileData(parentProj?.zip_file_data || '');
     }
   }, [currentDoc, projectId]);
+
+  const handleDownloadZip = () => {
+    if (!docZipFileData || !docZipFileName) return;
+    const link = document.createElement('a');
+    link.href = docZipFileData;
+    link.download = docZipFileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleUploadZip = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setDocZipFileName(file.name);
+      
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          setDocZipFileData(reader.result);
+          
+          // instantly save to project
+          const projects = getProjects();
+          const parentProj = projects.find(p => p.id === projectId);
+          if (parentProj) {
+            parentProj.zip_file_name = file.name;
+            parentProj.zip_file_data = reader.result;
+            saveProject(parentProj);
+          }
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleUpdateDocMetadata = () => {
     if (currentDoc) {
@@ -769,6 +807,22 @@ export default function TestCaseTable({
                           );
                         })}
                       </select>
+
+                      <div className="flex items-center gap-1.5 border border-[#E7D6C4] bg-[#FFF4E8]/50 rounded-lg px-2 py-1 ml-2">
+                        <label className="text-[10px] font-bold text-[#8B5A2B] cursor-pointer flex items-center gap-1 hover:underline group">
+                          <Upload className="w-3.5 h-3.5 group-hover:-translate-y-0.5 transition-transform" />
+                          <span className="truncate max-w-[120px]">{docZipFileName || 'Upload ZIP'}</span>
+                          <input type="file" accept=".zip,.rar,.7z" className="hidden" onChange={handleUploadZip} />
+                        </label>
+                        {docZipFileName && (
+                          <>
+                            <div className="w-[1px] h-3 bg-[#E7D6C4] mx-0.5"></div>
+                            <button onClick={handleDownloadZip} className="text-[#8B5A2B] hover:text-[#A66B37] p-0.5 rounded hover:bg-[#F5EDE4] transition-colors" title="Download ZIP">
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   );
                 }
