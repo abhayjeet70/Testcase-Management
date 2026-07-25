@@ -52,6 +52,9 @@ export default function ProjectsManager({
   // Document actions context menu state
   const [documentActionMenu, setDocumentActionMenu] = useState<{ docId: string; projectId: string } | null>(null);
 
+  // Ribbon popup for sheets state
+  const [selectedProjectForDocs, setSelectedProjectForDocs] = useState<Project | null>(null);
+
   // Project details modal state
   const [projectDetailsModal, setProjectDetailsModal] = useState<Project | null>(null);
   const [editedVersion, setEditedVersion] = useState('');
@@ -228,7 +231,7 @@ export default function ProjectsManager({
             </form>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="flex flex-col gap-3">
             {filteredProjects.length > 0 ? (
               filteredProjects.map((p) => {
                 const docs = getDocuments(p.id);
@@ -236,37 +239,65 @@ export default function ProjectsManager({
                 const isMenuOpen = activeMenuId === p.id;
 
                 return (
-                  <div key={p.id} className="bg-white border border-[#E7D6C4] rounded-2xl shadow-sm hover:shadow-md transition-shadow group flex flex-col relative">
-                    <div className="p-4 border-b border-[#F5EDE4] flex items-start justify-between">
-                      <div 
-                        className="flex-1 min-w-0 cursor-pointer"
-                        onClick={() => openProjectDetails(p)}
-                      >
+                  <div 
+                    key={p.id} 
+                    className="bg-white border border-[#E7D6C4] rounded-2xl shadow-sm hover:shadow-md transition-shadow group flex flex-col sm:flex-row items-stretch sm:items-center justify-between p-4 relative cursor-pointer"
+                    onClick={() => setSelectedProjectForDocs(p)}
+                  >
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className="p-3 bg-[#FFF4E8] rounded-xl shrink-0">
+                        <Folder className="w-6 h-6 text-[#8B5A2B]" />
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <Folder className="w-5 h-5 text-[#8B5A2B] shrink-0" />
-                          <h3 className="font-bold text-[#3B2A1D] truncate text-sm">{p.project_name}</h3>
-                          {p.favorite && <Star className="w-3.5 h-3.5 fill-[#F5A623] text-[#F5A623] shrink-0" />}
+                          <h3 className="font-bold text-[#3B2A1D] text-base truncate">{p.project_name}</h3>
+                          {p.favorite && <Star className="w-4 h-4 fill-[#F5A623] text-[#F5A623] shrink-0" />}
                         </div>
-                        <p className="text-xs text-[#7A6A5A] line-clamp-1 mb-1">{p.description || 'No description provided.'}</p>
-                        <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                        <p className="text-xs text-[#7A6A5A] line-clamp-1 mb-2">{p.description || 'No description provided.'}</p>
+                        
+                        <div className="flex items-center gap-2 flex-wrap">
                           {p.version && (
-                            <div className="text-[10px] bg-[#FFF4E8] text-[#8B5A2B] px-1.5 py-0.5 rounded font-bold">
+                            <div className="text-[10px] bg-[#FFF4E8] text-[#8B5A2B] px-2 py-0.5 rounded-md font-bold">
                               {p.version}
                             </div>
                           )}
                           {p.developer && (
-                            <div className="text-[10px] bg-[#FFF4E8] text-[#8B5A2B] px-1.5 py-0.5 rounded font-bold">
+                            <div className="text-[10px] bg-[#F5F5F5] text-[#555] px-2 py-0.5 rounded-md font-bold">
                               Dev: {p.developer}
                             </div>
                           )}
+                          {p.vercel_link && (
+                            <a 
+                              href={p.vercel_link} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md font-bold truncate max-w-[150px] hover:underline"
+                            >
+                              {p.vercel_link.replace(/^https?:\/\//, '')}
+                            </a>
+                          )}
+                          <div className="text-[10px] bg-[#FDFBF9] border border-[#E7D6C4] text-[#7A6A5A] px-2 py-0.5 rounded-md font-bold">
+                            {docs.length} Sheets
+                          </div>
                         </div>
                       </div>
-                      
-                      {/* Context Menu Button */}
-                      <div className="relative shrink-0 ml-2">
+                    </div>
+
+                    <div className="mt-4 sm:mt-0 sm:ml-4 flex items-center justify-end gap-2 shrink-0">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openProjectDetails(p); }}
+                        className="p-2 border border-[#E7D6C4] text-[#7A6A5A] hover:text-[#3B2A1D] hover:bg-[#FFF4E8] rounded-xl transition-colors"
+                        title="Project Settings"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+
+                      <div className="relative shrink-0">
                         <button
                           onClick={(e) => { e.stopPropagation(); setActiveMenuId(isMenuOpen ? null : p.id); }}
-                          className="p-1.5 rounded-lg hover:bg-[#FFF8F2] text-[#7A6A5A] hover:text-[#3B2A1D]"
+                          className="p-2 border border-[#E7D6C4] text-[#7A6A5A] hover:text-[#3B2A1D] hover:bg-[#FFF4E8] rounded-xl transition-colors"
                         >
                           <MoreVertical className="w-4 h-4" />
                         </button>
@@ -294,59 +325,15 @@ export default function ProjectsManager({
                           </div>
                         )}
                       </div>
-                    </div>
 
-                    <div className="p-3 flex-1 bg-[#FDFBF9] flex flex-col">
-                      <div className="flex items-center justify-between mb-2 px-1">
-                        <span className="text-[10px] font-bold text-[#7A6A5A] uppercase tracking-wider">Documents ({docs.length})</span>
-                        <button
-                          onClick={() => setDocumentModalProject(p.id)}
-                          className="text-[#8B5A2B] hover:text-[#A66B37] text-[10px] font-bold flex items-center gap-0.5"
-                        >
-                          <Plus className="w-3 h-3" /> Add File
-                        </button>
-                      </div>
-                      <div className="flex-1 space-y-1 max-h-[150px] overflow-y-auto pr-1 custom-scrollbar">
-                        {docs.length > 0 ? docs.map(doc => {
-                          const docCases = getTestCases(doc.id).length;
-                          return (
-                            <div 
-                              key={doc.id}
-                              onClick={() => { onSelectProject(p.id); onSelectDocument(doc.id); onSelectTab('Projects'); }}
-                              className="group/doc flex items-center justify-between p-2 rounded-lg hover:bg-white border border-transparent hover:border-[#E7D6C4] cursor-pointer transition-colors"
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <FileText className="w-3.5 h-3.5 text-[#8B5A2B]/70 shrink-0" />
-                                <span className="text-xs font-semibold text-[#3B2A1D] truncate">{doc.name}</span>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-[10px] text-[#7A6A5A] bg-[#FFF4E8] px-1.5 py-0.5 rounded-md">{docCases} cases</span>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setDocumentActionMenu({ docId: doc.id, projectId: p.id }); }}
-                                  className="opacity-0 group-hover/doc:opacity-100 p-0.5 rounded hover:bg-[#FFF4E8] text-[#7A6A5A] transition-opacity"
-                                >
-                                  <MoreVertical className="w-3 h-3" />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        }) : (
-                          <div className="text-center py-4 text-xs text-[#7A6A5A]/60 italic bg-white border border-dashed border-[#E7D6C4] rounded-lg">
-                            No documents yet.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="p-3 border-t border-[#F5EDE4] bg-[#FFF8F2]/30 rounded-b-2xl text-[10px] font-semibold text-[#7A6A5A] flex justify-between items-center">
-                      <span>Total Cases: {totalCases.length}</span>
                       <button 
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           onSelectProject(p.id);
                           if (docs.length > 0) onSelectDocument(docs[0].id);
                           onSelectTab('Projects');
                         }}
-                        className="text-[#8B5A2B] hover:underline"
+                        className="px-4 py-2 bg-[#FFF4E8] text-[#8B5A2B] hover:bg-[#FCECDA] border border-[#E7D6C4]/60 text-xs font-bold rounded-xl transition-colors shadow-xs"
                       >
                         Open Workspace →
                       </button>
@@ -355,7 +342,7 @@ export default function ProjectsManager({
                 );
               })
             ) : (
-              <div className="col-span-full py-12 text-center bg-white border border-dashed border-[#E7D6C4] rounded-2xl flex flex-col items-center">
+              <div className="py-12 text-center bg-white border border-dashed border-[#E7D6C4] rounded-2xl flex flex-col items-center">
                 <FolderOpen className="w-10 h-10 text-[#E7D6C4] mb-3" />
                 <h3 className="text-sm font-bold text-[#3B2A1D]">No projects found</h3>
                 <p className="text-xs text-[#7A6A5A] mt-1">Create a new project or adjust your search.</p>
@@ -650,6 +637,97 @@ export default function ProjectsManager({
                   Save
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* SHEETS / DOCUMENTS POPUP */}
+      {selectedProjectForDocs && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 animate-fade-in p-4" onClick={() => setSelectedProjectForDocs(null)}>
+          <div className="bg-white border border-[#E7D6C4] rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between border-b border-[#F5EDE4] pb-3 shrink-0">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-[#FFF4E8] text-[#8B5A2B] rounded-xl shrink-0">
+                  <FolderOpen className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-base font-extrabold text-[#3B2A1D] truncate">{selectedProjectForDocs.project_name}</h3>
+                  <p className="text-xs text-[#7A6A5A] truncate">Sheets & Documents</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setDocumentModalProject(selectedProjectForDocs.id)}
+                className="px-3 py-1.5 bg-[#8B5A2B] hover:bg-[#A66B37] text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add Sheet
+              </button>
+            </div>
+            
+            <div className="overflow-y-auto flex-1 pr-1 custom-scrollbar space-y-2">
+              {(() => {
+                const docs = getDocuments(selectedProjectForDocs.id);
+                if (docs.length === 0) {
+                  return (
+                    <div className="text-center py-8 text-xs text-[#7A6A5A]/60 italic bg-white border border-dashed border-[#E7D6C4] rounded-xl">
+                      No sheets added yet.
+                    </div>
+                  );
+                }
+                return docs.map(doc => {
+                  const docCases = getTestCases(doc.id).length;
+                  const versionMatch = doc.name.match(/V(\d+)/i);
+                  const versionTag = versionMatch ? `V${versionMatch[1]}` : null;
+
+                  return (
+                    <div 
+                      key={doc.id}
+                      onClick={() => { 
+                        onSelectProject(selectedProjectForDocs.id); 
+                        onSelectDocument(doc.id); 
+                        onSelectTab('Projects'); 
+                      }}
+                      className="group/doc flex items-center justify-between p-3 rounded-xl hover:bg-[#FDFBF9] border border-[#E7D6C4]/60 hover:border-[#8B5A2B]/40 cursor-pointer transition-all"
+                    >
+                      <div className="flex flex-col min-w-0">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-[#8B5A2B]/70 shrink-0" />
+                          <span className="text-sm font-bold text-[#3B2A1D] truncate">{doc.name}</span>
+                        </div>
+                        {doc.description && (
+                          <span className="text-xs text-[#7A6A5A] truncate mt-1 ml-6">{doc.description}</span>
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center gap-2 shrink-0 ml-4">
+                        {versionTag && (
+                          <span className="text-[10px] text-[#8B5A2B] bg-[#FFF4E8] px-2 py-0.5 rounded-md font-bold border border-[#F5EDE4]">
+                            {versionTag}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-[#555] bg-gray-100 px-2 py-0.5 rounded-md font-bold">
+                          {docCases} cases
+                        </span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDocumentActionMenu({ docId: doc.id, projectId: selectedProjectForDocs.id }); }}
+                          className="p-1 rounded hover:bg-gray-200 text-[#7A6A5A] transition-colors"
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            <div className="pt-3 border-t border-[#F5EDE4] flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setSelectedProjectForDocs(null)}
+                className="px-4 py-2 border border-[#E7D6C4] text-[#7A6A5A] text-xs font-semibold rounded-xl hover:bg-gray-50"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

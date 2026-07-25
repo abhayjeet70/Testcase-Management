@@ -583,7 +583,7 @@ TC-003,Empty Field Lockout,Verify strict frontend validation on required blank f
                       ) : (
                         <div 
                           onDoubleClick={() => startEditing(idx, 'test_objective', tc.test_objective)}
-                          className="cursor-text py-1 line-clamp-3 hover:bg-[#FFF4E8] rounded px-1"
+                          className="cursor-text py-1 hover:bg-[#FFF4E8] rounded px-1 whitespace-pre-wrap"
                         >
                           {tc.test_objective || <span className="italic text-gray-300">Add info...</span>}
                         </div>
@@ -603,7 +603,7 @@ TC-003,Empty Field Lockout,Verify strict frontend validation on required blank f
                       ) : (
                         <div 
                           onDoubleClick={() => startEditing(idx, 'test_steps', tc.test_steps)}
-                          className="cursor-text py-1 line-clamp-4 hover:bg-[#FFF4E8] rounded px-1 prose prose-xs"
+                          className="cursor-text py-1 hover:bg-[#FFF4E8] rounded px-1 prose prose-xs whitespace-pre-wrap"
                           dangerouslySetInnerHTML={{ __html: tc.test_steps }}
                         />
                       )}
@@ -622,7 +622,7 @@ TC-003,Empty Field Lockout,Verify strict frontend validation on required blank f
                       ) : (
                         <div 
                           onDoubleClick={() => startEditing(idx, 'issues', tc.issues)}
-                          className="cursor-text py-1 line-clamp-2 hover:bg-[#FFF4E8] rounded px-1 text-red-500 font-bold bg-red-50/20"
+                          className="cursor-text py-1 hover:bg-[#FFF4E8] rounded px-1 text-red-500 font-bold bg-red-50/20 whitespace-pre-wrap"
                         >
                           {tc.issues || <span className="italic text-gray-300">No issues</span>}
                         </div>
@@ -630,8 +630,28 @@ TC-003,Empty Field Lockout,Verify strict frontend validation on required blank f
                     </td>
 
                     {/* Status */}
-                    <td className="p-3 text-[#3B2A1D] font-semibold">
-                      {tc.status || 'Not Tested'}
+                    <td className="p-3">
+                      <select
+                        value={tc.status || 'Not Tested'}
+                        onChange={(e) => {
+                          const updated = [...parsedCases];
+                          updated[idx].status = e.target.value as any;
+                          setParsedCases(updated);
+                        }}
+                        className={`text-xs font-bold border-none bg-transparent cursor-pointer focus:outline-none focus:ring-0 ${
+                          tc.status === 'Fixed' ? 'text-green-600' : 
+                          tc.status === 'Not Fixed' ? 'text-red-600' :
+                          tc.status === 'In Progress' ? 'text-blue-600' :
+                          tc.status === 'Blocked' ? 'text-orange-600' :
+                          'text-[#7A6A5A]'
+                        }`}
+                      >
+                        <option value="Not Tested" className="text-[#7A6A5A]">Not Tested</option>
+                        <option value="Fixed" className="text-green-600">Fixed</option>
+                        <option value="Not Fixed" className="text-red-600">Not Fixed</option>
+                        <option value="In Progress" className="text-blue-600">In Progress</option>
+                        <option value="Blocked" className="text-orange-600">Blocked</option>
+                      </select>
                     </td>
 
                     {/* Screenshot */}
