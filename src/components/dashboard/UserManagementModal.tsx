@@ -159,7 +159,7 @@ export default function UserManagementModal({ editingUser, onClose, showToast }:
                 <option value="team_lead">Team Lead — Manage & assign bugs</option>
                 <option value="developer">Developer — Fix & update bugs</option>
                 <option value="tester">QA Tester — Report & test bugs</option>
-                <option value="intern">Intern — Read-only access</option>
+                <option value="intern">Intern — Resolve bugs & assigned access</option>
               </select>
               <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A0A0A0]" />
             </div>

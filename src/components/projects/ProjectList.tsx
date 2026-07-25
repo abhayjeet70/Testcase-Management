@@ -175,15 +175,15 @@ export default function ProjectList({
         </button>
 
         <button
-          onClick={() => onSelectTab('DownloadHistory')}
+          onClick={() => onSelectTab('TeamActivity')}
           className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all ${
-            activeTab === 'DownloadHistory' 
+            activeTab === 'TeamActivity' 
               ? 'bg-[#8B5A2B] text-white shadow-xs font-bold' 
               : 'text-[#7A6A5A] hover:text-[#3B2A1D] hover:bg-[#FFF8F2]'
           }`}
         >
           <Clock className="w-4 h-4" />
-          Download History
+          Team Activity / Logs
         </button>
 
         <button
@@ -210,7 +210,7 @@ export default function ProjectList({
           Settings
         </button>
 
-        {currentUser?.role === 'admin' && (
+        {(currentUser?.role === 'admin' || currentUser?.role === 'team_lead') && (
           <button
             onClick={() => onSelectTab('TeamManagement')}
             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all ${

@@ -9,6 +9,8 @@ interface AuthContextType {
   adminCreateUser: (email: string, password: string, name: string, role: UserRole) => Promise<{ success: boolean; error?: string }>;
   adminUpdateUser: (id: string, name: string, role: UserRole) => Promise<{ success: boolean; error?: string }>;
   adminDeleteUser: (id: string) => Promise<{ success: boolean; error?: string }>;
+  updateProfile: (name: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  seedInitialUsers: () => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
   isAuthenticated: boolean;
   users: User[]; // Keep this to simulate a loaded "directory" of all users for dropdowns
@@ -60,12 +62,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log("Migrating cached users up to Supabase profiles...", extraCached);
         // Push them to DB so they sync everywhere
         for (const u of extraCached) {
-          await supabase.from('profiles').upsert([{
+          const { error: upsertErr } = await supabase.from('profiles').upsert([{
             id: u.id,
             name: u.name,
-            email: u.email,
             role: u.role
           }], { onConflict: 'id' });
+          if (upsertErr) console.warn("Migration upsert error:", upsertErr);
         }
       }
 
@@ -112,28 +114,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const email = user.email || '';
     const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
     
+    let resolvedUser: User;
     if (data && !error) {
-      setCurrentUser({
+      resolvedUser = {
         id: userId,
         email,
         name: data.name,
         role: data.role as UserRole,
         createdAt: data.created_at,
         isActive: true
-      });
+      };
     } else {
       // Fallback if profile row is missing or blocked by RLS
       // We stored name and role in user_metadata during signUp
       const metadata = user.user_metadata || {};
       
-      setCurrentUser({
+      resolvedUser = {
         id: userId,
         email,
         name: metadata.name || 'Unknown User',
         role: metadata.role || 'tester',
         createdAt: user.created_at || new Date().toISOString(),
         isActive: true
-      });
+      };
       
       // Attempt to self-heal by inserting the missing profile row 
       // (This will only work if RLS allows users to insert their own rows)
@@ -143,6 +146,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
          ]);
       }
     }
+    setCurrentUser(resolvedUser);
+    localStorage.setItem('tc_current_user', JSON.stringify(resolvedUser));
   };
 
   const login = async (email: string, password = 'password123'): Promise<{ success: boolean; error?: string }> => {
@@ -184,6 +189,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { success: true };
   };
 
+  const updateProfile = async (name: string, password?: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      if (!currentUser) return { success: false, error: 'Not logged in' };
+      
+      const updateData: any = { data: { name } };
+      
+      // Update Auth metadata and password if provided
+      const { data, error } = await supabase.auth.updateUser({
+        ...(password ? { password } : {}),
+        data: { name }
+      });
+      
+      if (error) return { success: false, error: error.message };
+
+      // Update profiles table
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ name })
+        .eq('id', currentUser.id);
+        
+      if (profileError) {
+        console.warn('Profile table update failed:', profileError.message);
+      }
+      
+      setCurrentUser(prev => prev ? { ...prev, name } : null);
+      await fetchUsers(); // Refresh cache
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  const seedInitialUsers = async (): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const demoUsers = [
+        { email: 'admin@webnxt.co', name: 'Admin', role: 'admin' as UserRole },
+        { email: 'tl@webnxt.co', name: 'Team Lead', role: 'team_lead' as UserRole },
+        { email: 'emp@webnxt.co', name: 'Employee', role: 'developer' as UserRole },
+        { email: 'tester@webnxt.co', name: 'Tester', role: 'tester' as UserRole },
+        { email: 'intern1@webnxt.co', name: 'Intern 1', role: 'intern' as UserRole },
+        { email: 'intern2@webnxt.co', name: 'Intern 2', role: 'intern' as UserRole }
+      ];
+      
+      let created = 0;
+      for (const u of demoUsers) {
+        // Only create if they don't exist in local cache yet (to avoid duplicate errors spam)
+        const exists = users.find(x => x.email === u.email);
+        if (!exists) {
+          await adminCreateUser(u.email, 'demo@123', u.name, u.role);
+          created++;
+        }
+      }
+      return { success: true, message: `Seeded ${created} new users.` };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  };
+
   const adminCreateUser = async (email: string, password: string, name: string, role: UserRole): Promise<{ success: boolean; error?: string }> => {
     try {
       // Use a secondary supabase client with persistSession:false so we don't kick the admin out
@@ -217,10 +280,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error: 'User creation succeeded but no user was returned.' };
       }
 
-      // Step 2: Upsert the profile row with email (safe even if trigger already created it)
+      // Step 2: Upsert the profile row (omit email to prevent schema errors if column is missing)
       const { error: profileError } = await supabase
         .from('profiles')
-        .upsert([{ id: data.user.id, name, role, email }], { onConflict: 'id' });
+        .upsert([{ id: data.user.id, name, role }], { onConflict: 'id' });
 
       if (profileError) {
         // Profile insert failed (likely RLS) — not fatal, metadata fallback still works on login

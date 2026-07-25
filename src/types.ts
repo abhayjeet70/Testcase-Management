@@ -16,6 +16,12 @@ export interface Project {
   zip_file_name?: string;
   zip_file_data?: string;
   id_prefix?: string;
+  owner_id?: string;
+  tester_id?: string;
+  tester_assigned_at?: string;
+  intern_id?: string;
+  intern_assigned_at?: string;
+  developer_assigned_at?: string;
   created_at: string;
   updated_at: string;
   archived: boolean;
@@ -47,6 +53,9 @@ export interface TestCaseDocument {
   module_code?: string;
   project_link?: string;
   developer_assigned?: string;
+  is_completed?: boolean;
+  completed_at?: string;
+  completed_by?: string;
   created_at: string;
   updated_at: string;
   archived?: boolean;
@@ -87,6 +96,8 @@ export interface TestCase {
   status: TestCaseStatus;
   display_order: number;
   tag_ids?: string[];
+  resolved_by?: string;
+  resolved_at?: string;
   created_at: string;
   updated_at: string;
   screenshots: Screenshot[];
@@ -151,6 +162,8 @@ export interface ActivityLog {
   test_case_no?: string;
   action: string;
   timestamp: string;
+  user_name?: string;
+  user_role?: string;
 }
 
 export interface DownloadHistoryEntry {

@@ -128,11 +128,11 @@ export default function LoginPage() {
                       onChange={(e) => setRole(e.target.value as UserRole)}
                       className="block w-full pl-3 pr-10 py-2.5 bg-white border border-[#E7D6C4] rounded-xl text-[#3B2A1D] focus:outline-none focus:ring-2 focus:ring-[#8B5A2B]/50 focus:border-[#8B5A2B] transition-all appearance-none cursor-pointer"
                     >
-                      <option value="admin">Administrator</option>
-                      <option value="team_lead">Team Lead</option>
-                      <option value="developer">Developer</option>
-                      <option value="tester">Tester</option>
-                      <option value="intern">Intern</option>
+                      <option value="admin">Administrator — Full access</option>
+                      <option value="team_lead">Team Lead — Manage & assign bugs</option>
+                      <option value="developer">Developer — Fix & update bugs</option>
+                      <option value="tester">QA Tester — Report & test bugs</option>
+                      <option value="intern">Intern — Resolve bugs & assigned access</option>
                     </select>
                   </div>
                 </motion.div>

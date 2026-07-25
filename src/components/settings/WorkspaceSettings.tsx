@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Settings, Download, Upload, RotateCcw, Keyboard } from 'lucide-react';
 import { useSettings } from '../../contexts/SettingsContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { TestCaseStatus, ThemeMode, TableDensity, DefaultExportFormat } from '../../types';
 import { downloadWorkspaceBackup, importWorkspaceBackup, parseWorkspaceBackup, resetWorkspace } from '../../utils/workspaceBackup';
 import { renumberDocumentTestCases } from '../../utils/storage';
@@ -21,6 +22,7 @@ export default function WorkspaceSettings({
   onDataReset,
 }: WorkspaceSettingsProps) {
   const { settings, updateSettings } = useSettings();
+  const { currentUser } = useAuth();
   const [resetConfirm, setResetConfirm] = useState('');
   const [restoreStatus, setRestoreStatus] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -195,29 +197,31 @@ export default function WorkspaceSettings({
           <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleRestore} />
         </div>
         {restoreStatus && <p className="text-xs text-[#7A6A5A]">{restoreStatus}</p>}
-        <div className="border border-red-200 bg-red-50 rounded-lg p-4 space-y-3 mt-2">
-          <p className="text-sm font-semibold text-red-800 flex items-center gap-2">
-            <RotateCcw className="w-4 h-4" /> Reset Workspace
-          </p>
-          <p className="text-xs text-red-700">Deletes all data and restores demo projects. Type RESET to confirm.</p>
-          <input
-            value={resetConfirm}
-            onChange={e => setResetConfirm(e.target.value)}
-            placeholder="Type RESET"
-            className="w-full text-sm border border-red-200 rounded-lg px-3 py-2"
-          />
-          <button
-            type="button"
-            disabled={resetConfirm !== 'RESET'}
-            onClick={() => {
-              resetWorkspace();
-              window.location.reload();
-            }}
-            className="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg disabled:opacity-40"
-          >
-            Reset Workspace
-          </button>
-        </div>
+        {currentUser?.role !== 'intern' && currentUser?.role !== 'tester' && (
+          <div className="border border-red-200 bg-red-50 rounded-lg p-4 space-y-3 mt-2">
+            <p className="text-sm font-semibold text-red-800 flex items-center gap-2">
+              <RotateCcw className="w-4 h-4" /> Reset Workspace
+            </p>
+            <p className="text-xs text-red-700">Deletes all data and restores demo projects. Type RESET to confirm.</p>
+            <input
+              value={resetConfirm}
+              onChange={e => setResetConfirm(e.target.value)}
+              placeholder="Type RESET"
+              className="w-full text-sm border border-red-200 rounded-lg px-3 py-2"
+            />
+            <button
+              type="button"
+              disabled={resetConfirm !== 'RESET'}
+              onClick={() => {
+                resetWorkspace();
+                window.location.reload();
+              }}
+              className="px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg disabled:opacity-40"
+            >
+              Reset Workspace
+            </button>
+          </div>
+        )}
       </Section>
     </div>
   );

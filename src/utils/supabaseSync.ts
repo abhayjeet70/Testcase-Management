@@ -63,13 +63,13 @@ export const hydrateFromSupabase = async (): Promise<boolean> => {
         const lLogs = JSON.parse(localStorage.getItem(LOGS_KEY) || '[]');
         const lBugs = JSON.parse(localStorage.getItem(BUGS_KEY) || '[]');
 
-        lProjects.forEach((p: any) => upsertRecord('tc_projects', p));
-        lModules.forEach((m: any) => upsertRecord('tc_modules', m));
-        lDocs.forEach((d: any) => upsertRecord('tc_documents', d));
-        lCases.forEach((tc: any) => upsertRecord('tc_test_cases', tc));
-        lCols.forEach((c: any) => upsertRecord('tc_custom_columns', c));
-        lLogs.forEach((l: any) => upsertRecord('tc_activity_logs', l));
-        lBugs.forEach((b: any) => upsertRecord('tc_bugs', b)); // upsertRecord already maps camelCase
+        for (const p of lProjects) await upsertRecord('tc_projects', p);
+        for (const m of lModules) await upsertRecord('tc_modules', m);
+        for (const d of lDocs) await upsertRecord('tc_documents', d);
+        for (const tc of lCases) await upsertRecord('tc_test_cases', tc);
+        for (const c of lCols) await upsertRecord('tc_custom_columns', c);
+        for (const l of lLogs) await upsertRecord('tc_activity_logs', l);
+        for (const b of lBugs) await upsertRecord('tc_bugs', b); // upsertRecord already maps camelCase
 
         return true;
       }
@@ -167,19 +167,18 @@ export const upsertRecord = async (table: string, data: any) => {
         created_at: data.createdAt,
         updated_at: data.updatedAt
       };
-    } else if (table === 'tc_documents') {
-      payload = { ...data };
-      delete payload.project_link;
-      delete payload.developer_assigned;
     }
 
     // Fire and forget
     const { error } = await supabase.from(table).upsert(payload, { onConflict: 'id' });
     if (error) {
       console.error(`Background Sync Error upserting to ${table}:`, error.message);
+      // Show exact error to the user to debug silent failures
+      window.alert(`Supabase Sync Error (${table}): ${error.message}\nDetails: ${error.details || ''}\nHint: ${error.hint || ''}`);
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error(`Background Sync Exception in ${table}:`, error);
+    window.alert(`Supabase Exception (${table}): ${error.message || 'Unknown error'}`);
   }
 };
 

@@ -401,7 +401,7 @@ export const deleteProject = (id: string, deletedBy: string = 'Current User') =>
   deleteRecord('tc_projects', id);
 };
 
-export const duplicateProject = (id: string): Project => {
+export const duplicateProject = (id: string, newOwnerId?: string): Project => {
   const projects = getProjects();
   const source = projects.find(p => p.id === id);
   if (!source) throw new Error('Source project not found');
@@ -412,7 +412,8 @@ export const duplicateProject = (id: string): Project => {
     project_name: `${source.project_name} (Copy)`,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-    favorite: false
+    favorite: false,
+    owner_id: newOwnerId || source.owner_id
   };
   projects.push(duplicated);
   localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
@@ -929,13 +930,18 @@ export const addActivityLog = (projectId: string, action: string, testCaseId?: s
   const data = localStorage.getItem(LOGS_KEY);
   const logs: ActivityLog[] = data ? JSON.parse(data) : [];
 
+  const currentUserData = localStorage.getItem('tc_current_user');
+  const currentUser = currentUserData ? JSON.parse(currentUserData) : null;
+
   const newLog: ActivityLog = {
     id: generateId(),
     project_id: projectId,
     test_case_id: testCaseId,
     test_case_no: testCaseNo,
     action,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    user_name: currentUser?.name || 'System',
+    user_role: currentUser?.role || 'admin'
   };
 
   logs.push(newLog);

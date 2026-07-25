@@ -13,6 +13,7 @@ import Dashboard from './components/dashboard/Dashboard';
 import TestCaseTable from './components/table/TestCaseTable';
 import AITestCaseGenerator from './components/dashboard/AITestCaseGenerator';
 import CsvToWordConverter from './components/dashboard/CsvToWordConverter';
+import TeamActivityLog from './components/dashboard/TeamActivityLog';
 import DownloadHistory, { recordDownloadEvent } from './components/dashboard/DownloadHistory';
 import RecycleBin from './components/dashboard/RecycleBin';
 import TemplatesManager from './components/dashboard/TemplatesManager';
@@ -22,6 +23,7 @@ import CommandPalette from './components/command/CommandPalette';
 import KeyboardShortcutsDialog from './components/help/KeyboardShortcutsDialog';
 import BugTracker from './components/bugs/BugTracker';
 import TeamManagementModule from './components/team/TeamManagementModule';
+import ProfileSettingsModal from './components/settings/ProfileSettingsModal';
 import { Project, TestCase, CustomColumn, ActivityLog, TestCaseStatus, RecentItem } from './types';
 import { 
   initializeStorage, getProjects, saveProject, deleteProject, 
@@ -95,6 +97,7 @@ function MainApp() {
   // Navbar project dropdown state
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
+  const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [newNavProjectName, setNewNavProjectName] = useState('');
   const [projectDropdownPos, setProjectDropdownPos] = useState({ top: 0, left: 0 });
   const projectBtnRef = useRef<HTMLButtonElement>(null);
@@ -205,7 +208,15 @@ function MainApp() {
 
   const refreshData = (targetProjId?: string, targetDocId?: string) => {
     // Filter out corrupted projects (those without a project_name)
-    const loadedProjects = getProjects().filter(p => p.project_name?.trim());
+    let loadedProjects = getProjects().filter(p => p.project_name?.trim());
+    
+    // RBAC: Filter projects for testers and interns
+    if (currentUser && (currentUser.role === 'tester' || currentUser.role === 'intern')) {
+      loadedProjects = loadedProjects.filter(p => 
+        p.tester_id === currentUser.id || p.intern_id === currentUser.id
+      );
+    }
+    
     setProjects(loadedProjects);
 
     // Pick active project
@@ -264,7 +275,7 @@ function MainApp() {
 
   // Project managers
   const handleAddProject = (name: string, desc?: string) => {
-    const newProj = saveProject({ project_name: name, description: desc });
+    const newProj = saveProject({ project_name: name, description: desc, owner_id: currentUser?.id });
     refreshData(newProj.id);
     showToast(`Project "${name}" created successfully.`, 'success');
   };
@@ -278,7 +289,7 @@ function MainApp() {
   };
 
   const handleDuplicateProject = (id: string) => {
-    const duplicated = duplicateProject(id);
+    const duplicated = duplicateProject(id, currentUser?.id);
     refreshData(duplicated.id);
     showToast(`Duplicated project suite "${duplicated.project_name}"!`, 'success');
   };
@@ -301,8 +312,25 @@ function MainApp() {
   const handleSaveTestCase = (updatedTestCase: TestCase) => {
     try {
       saveTestCase(updatedTestCase);
-      setTestCases(getTestCases(selectedDocumentId));
+      const updatedCases = getTestCases(selectedDocumentId);
+      setTestCases(updatedCases);
       setActivityLogs(getActivityLogs(selectedProjectId));
+
+      // Auto-completion logic: check if all cases are Fixed
+      if (updatedTestCase.status === 'Fixed' && updatedCases.length > 0 && updatedCases.every(tc => tc.status === 'Fixed')) {
+        const doc = getDocuments(selectedProjectId).find(d => d.id === selectedDocumentId);
+        if (doc && !doc.is_completed) {
+          saveDocument({
+            ...doc,
+            is_completed: true,
+            completed_by: currentUser?.name || 'Unknown',
+            completed_at: new Date().toISOString()
+          });
+          addActivityLog(doc.project_id, `Sheet "${doc.name}" auto-completed (All bugs fixed)`);
+          refreshData(selectedProjectId, selectedDocumentId);
+          showToast('All test cases fixed! Sheet marked as Done.', 'success');
+        }
+      }
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to save test case', 'error');
     }
@@ -586,7 +614,7 @@ function MainApp() {
         showToast('Please enter a project name for the new project.', 'error');
         return;
       }
-      const createdProject = saveProject({ project_name: importNewProjectName.trim(), description: importNewProjectDesc });
+      const createdProject = saveProject({ project_name: importNewProjectName.trim(), description: importNewProjectDesc, owner_id: currentUser?.id });
       targetProjectId = createdProject.id;
       setSelectedProjectId(targetProjectId);
     }
@@ -1109,13 +1137,24 @@ function MainApp() {
                       
                       <button
                         onClick={() => {
+                          setShowProfileSettings(true);
+                          setIsProfileMenuOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm font-semibold text-[#3B2A1D] hover:bg-[#FFF8F2] flex items-center gap-2"
+                      >
+                        <UserIcon className="w-4 h-4 text-[#8B5A2B]" />
+                        Profile Settings
+                      </button>
+                      
+                      <button
+                        onClick={() => {
                           setActiveTab('Settings');
                           setIsProfileMenuOpen(false);
                         }}
                         className="w-full text-left px-4 py-2 text-sm font-semibold text-[#3B2A1D] hover:bg-[#FFF8F2] flex items-center gap-2"
                       >
                         <Settings className="w-4 h-4 text-[#8B5A2B]" />
-                        Settings
+                        Workspace Settings
                       </button>
                       
                       <div className="h-px bg-[#F5EDE4] my-2" />
@@ -1180,10 +1219,8 @@ function MainApp() {
                 setActiveTab('Test Cases Spreadsheet');
               }}
             />
-          ) : activeTab === 'DownloadHistory' ? (
-            <DownloadHistory
-              showToast={showToast}
-            />
+          ) : activeTab === 'TeamActivity' ? (
+            <TeamActivityLog showToast={showToast} />
           ) : activeTab === 'RecycleBin' ? (
             <RecycleBin
               showToast={showToast}
@@ -1197,7 +1234,7 @@ function MainApp() {
               onOpenShortcuts={() => setShowShortcuts(true)}
               onDataReset={() => refreshData()}
             />
-          ) : activeTab === 'TeamManagement' && currentUser?.role === 'admin' ? (
+          ) : activeTab === 'TeamManagement' && (currentUser?.role === 'admin' || currentUser?.role === 'team_lead') ? (
             <TeamManagementModule />
           ) : activeTab === 'BugTracker' ? (
             <BugTracker 
@@ -1545,6 +1582,7 @@ function MainApp() {
       <WorkspaceSearchDialog open={showWorkspaceSearch} onClose={() => setShowWorkspaceSearch(false)} onNavigate={handleWorkspaceNavigate} />
       <CommandPalette open={showCommandPalette} onClose={() => setShowCommandPalette(false)} context={commandContext} />
       <KeyboardShortcutsDialog open={showShortcuts} onClose={() => setShowShortcuts(false)} />
+      {showProfileSettings && <ProfileSettingsModal onClose={() => setShowProfileSettings(false)} />}
     </div>
   );
 }

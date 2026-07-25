@@ -3,10 +3,11 @@ import {
   Plus, Copy, Trash2, ArrowUp, ArrowDown, Columns, 
   Search, Image as ImageIcon, ChevronDown, 
   Settings2, Eye, Download, Filter, Check, X, EyeOff, Clipboard,
-  Sparkles, Bold, Italic, List, ImageOff, Upload
+  Sparkles, Bold, Italic, List, ImageOff, Upload, Clock
 } from 'lucide-react';
 import { TestCase, TestCaseStatus, CustomColumn, Screenshot, TestCaseDocument } from '../../types';
-import { generateId, saveDocument, getProjects, saveProject } from '../../utils/storage';
+import { generateId, saveDocument, getProjects, saveProject, addActivityLog } from '../../utils/storage';
+import { useAuth } from '../../contexts/AuthContext';
 import { generateTestCaseNo } from '../../utils/testCaseIdGenerator';
 import { getDefaultStatus } from '../../utils/appSettings';
 import { isModKey } from '../../constants/keyboardShortcuts';
@@ -52,6 +53,7 @@ export default function TestCaseTable({
   onExportDocument,
   registerAddRow,
 }: TestCaseTableProps) {
+  const { currentUser } = useAuth();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
@@ -63,6 +65,11 @@ export default function TestCaseTable({
   const [docDeveloperAssigned, setDocDeveloperAssigned] = useState('');
   const [docZipFileName, setDocZipFileName] = useState('');
   const [docZipFileData, setDocZipFileData] = useState('');
+  
+  // Local completion state to force re-render
+  const [isCompletedState, setIsCompletedState] = useState(false);
+  const [completedByState, setCompletedByState] = useState('');
+  const [completedAtState, setCompletedAtState] = useState('');
 
   useEffect(() => {
     if (currentDoc) {
@@ -73,8 +80,30 @@ export default function TestCaseTable({
       setDocDeveloperAssigned(currentDoc.developer_assigned || parentProj?.developer || '');
       setDocZipFileName(parentProj?.zip_file_name || '');
       setDocZipFileData(parentProj?.zip_file_data || '');
+      
+      setIsCompletedState(!!currentDoc.is_completed);
+      setCompletedByState(currentDoc.completed_by || '');
+      setCompletedAtState(currentDoc.completed_at || '');
     }
   }, [currentDoc, projectId]);
+
+  const downloadDataUrl = async (dataUrl: string, fileName: string) => {
+    try {
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to download ZIP file.");
+    }
+  };
 
   const handleDownloadZip = async () => {
     if (!projectId || !docZipFileName) return;
@@ -96,12 +125,7 @@ export default function TestCaseTable({
       }
     }
     
-    const link = document.createElement('a');
-    link.href = dataUrl;
-    link.download = docZipFileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    await downloadDataUrl(dataUrl, docZipFileName);
   };
 
   const handleUploadZip = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -461,6 +485,11 @@ export default function TestCaseTable({
         ...original,
         [colName]: value
       } as TestCase;
+      
+      if (colName === 'status' && value === 'Fixed') {
+        updated.resolved_by = currentUser?.name || 'Unknown';
+        updated.resolved_at = new Date().toISOString();
+      }
     }
 
     onSaveTestCase(updated);
@@ -758,94 +787,166 @@ export default function TestCaseTable({
         </div>
       )}
       {/* TOOLBAR */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-4 border border-[#E7D6C4] rounded-2xl shadow-xs">
+      <div className="flex flex-col xl:flex-row xl:items-center xl:flex-wrap justify-between gap-4 bg-white p-4 border border-[#E7D6C4] rounded-2xl shadow-xs">
         
         {/* SEARCH AND FILTERS */}
-        <div className="flex flex-wrap items-center gap-3 flex-1">
+        <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
           {documents && documents.length > 0 && onSelectDocument && (
-            <div className="flex items-center gap-3 shrink-0 mr-2">
+            <div className="flex flex-wrap items-center gap-3 mr-2">
               {(() => {
                 const currentDoc = documents.find(d => d.id === documentId);
                 const docName = currentDoc?.name || '';
                 const versionMatch = docName.match(/(.*?) V(\d+)\.docx$/i);
                 
+                let currentVersion = '';
+                let versionDocs: typeof documents = [];
+
                 if (versionMatch) {
                   const baseName = versionMatch[1];
-                  const currentVersion = versionMatch[2];
+                  currentVersion = versionMatch[2];
                   // Find all versions of this base document
-                  const versionDocs = documents
+                  versionDocs = documents
                     .filter(d => d.name.startsWith(baseName))
                     .sort((a, b) => {
                       const m1 = a.name.match(/V(\d+)\.docx$/i);
                       const m2 = b.name.match(/V(\d+)\.docx$/i);
                       return (m1 ? parseInt(m1[1]) : 0) - (m2 ? parseInt(m2[1]) : 0);
                     });
-                  
-                  return (
-                    <div className="flex items-center gap-3">
-                      <div className="text-xs flex items-center gap-2">
-                        <span className="text-[#7A6A5A] font-medium whitespace-nowrap">Project Link: </span>
-                        <input 
-                          type="text" 
-                          value={docProjectLink}
-                          onChange={(e) => setDocProjectLink(e.target.value)}
-                          onBlur={handleUpdateDocMetadata}
-                          placeholder="e.g. Jira/Notion link..."
-                          className="border border-[#E7D6C4] bg-white rounded px-2 py-0.5 focus:ring-1 focus:ring-[#8B5A2B] outline-none text-[#3B2A1D] w-36"
-                        />
-                      </div>
-                      <div className="text-xs flex items-center gap-2">
-                        <span className="text-[#7A6A5A] font-medium whitespace-nowrap">Developer: </span>
-                        <input 
-                          type="text" 
-                          value={docDeveloperAssigned}
-                          onChange={(e) => setDocDeveloperAssigned(e.target.value)}
-                          onBlur={handleUpdateDocMetadata}
-                          placeholder="Assign to..."
-                          className="border border-[#E7D6C4] bg-white rounded px-2 py-0.5 focus:ring-1 focus:ring-[#8B5A2B] outline-none text-[#3B2A1D] w-28"
-                        />
-                      </div>
-                      <div className="text-xs ml-2">
-                        <span className="text-[#7A6A5A] font-medium">Version No: </span>
-                        <span className="font-bold text-[#8B5A2B] bg-[#FFF4E8] px-1.5 py-0.5 rounded">V{currentVersion}</span>
-                      </div>
-                      <select
-                        value={documentId}
-                        onChange={(e) => onSelectDocument(e.target.value)}
-                        className="text-xs border border-[#E7D6C4] bg-white rounded-lg px-2 py-1 focus:ring-1 focus:ring-[#8B5A2B] outline-none cursor-pointer"
-                        title="Sort / switch version wise"
-                      >
-                        <option value="" disabled>Select Version</option>
-                        {versionDocs.map(doc => {
-                          const vMatch = doc.name.match(/V(\d+)\.docx$/i);
-                          const v = vMatch ? `V${vMatch[1]}` : doc.name;
-                          return (
-                            <option key={doc.id} value={doc.id}>
-                              {v}
-                            </option>
-                          );
-                        })}
-                      </select>
-
-                      <div className="flex items-center gap-1.5 border border-[#E7D6C4] bg-[#FFF4E8]/50 rounded-lg px-2 py-1 ml-2">
-                        <label className="text-[10px] font-bold text-[#8B5A2B] cursor-pointer flex items-center gap-1 hover:underline group">
-                          <Upload className="w-3.5 h-3.5 group-hover:-translate-y-0.5 transition-transform" />
-                          <span className="truncate max-w-[120px]">{docZipFileName || 'Upload ZIP'}</span>
-                          <input type="file" accept=".zip,.rar,.7z" className="hidden" onChange={handleUploadZip} />
-                        </label>
-                        {docZipFileName && (
-                          <>
-                            <div className="w-[1px] h-3 bg-[#E7D6C4] mx-0.5"></div>
-                            <button onClick={handleDownloadZip} className="text-[#8B5A2B] hover:text-[#A66B37] p-0.5 rounded hover:bg-[#F5EDE4] transition-colors" title="Download ZIP">
-                              <Download className="w-3.5 h-3.5" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
                 }
-                return null;
+                  
+                return (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="text-xs flex items-center gap-2">
+                      <span className="text-[#7A6A5A] font-medium whitespace-nowrap">Project Link: </span>
+                      <input 
+                        type="text" 
+                        value={docProjectLink}
+                        onChange={(e) => setDocProjectLink(e.target.value)}
+                        onBlur={handleUpdateDocMetadata}
+                        placeholder="e.g. Jira/Notion link..."
+                        className="border border-[#E7D6C4] bg-white rounded px-2 py-0.5 focus:ring-1 focus:ring-[#8B5A2B] outline-none text-[#3B2A1D] w-36"
+                      />
+                    </div>
+                    <div className="text-xs flex items-center gap-2">
+                      <span className="text-[#7A6A5A] font-medium whitespace-nowrap">Developer: </span>
+                      <input 
+                        type="text" 
+                        value={docDeveloperAssigned}
+                        onChange={(e) => setDocDeveloperAssigned(e.target.value)}
+                        onBlur={handleUpdateDocMetadata}
+                        placeholder="Assign to..."
+                        className="border border-[#E7D6C4] bg-white rounded px-2 py-0.5 focus:ring-1 focus:ring-[#8B5A2B] outline-none text-[#3B2A1D] w-28"
+                      />
+                    </div>
+                    
+                    {currentDoc?.updated_at && (
+                      <div className="text-[10px] bg-gray-50 border border-gray-200 text-gray-500 px-2 py-0.5 rounded-md font-bold flex items-center gap-1" title="Last Updated">
+                        <Clock className="w-3 h-3" />
+                        {new Date(currentDoc.updated_at).toLocaleString(undefined, { 
+                          month: 'short', day: 'numeric', 
+                          hour: 'numeric', minute: '2-digit' 
+                        })}
+                      </div>
+                    )}
+                    
+                    {versionMatch && (
+                      <>
+                        <div className="text-xs ml-2">
+                          <span className="text-[#7A6A5A] font-medium">Version No: </span>
+                          <span className="font-bold text-[#8B5A2B] bg-[#FFF4E8] px-1.5 py-0.5 rounded">V{currentVersion}</span>
+                        </div>
+                        <select
+                          value={documentId}
+                          onChange={(e) => onSelectDocument(e.target.value)}
+                          className="text-xs border border-[#E7D6C4] bg-white rounded-lg px-2 py-1 focus:ring-1 focus:ring-[#8B5A2B] outline-none cursor-pointer"
+                          title="Sort / switch version wise"
+                        >
+                          <option value="" disabled>Select Version</option>
+                          {versionDocs.map(doc => {
+                            const vMatch = doc.name.match(/V(\d+)\.docx$/i);
+                            const v = vMatch ? `V${vMatch[1]}` : doc.name;
+                            return (
+                              <option key={doc.id} value={doc.id}>
+                                {v}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </>
+                    )}
+
+                    <div className="flex items-center gap-1.5 border border-[#E7D6C4] bg-[#FFF4E8]/50 rounded-lg px-2 py-1 ml-2">
+                      <label className="text-[10px] font-bold text-[#8B5A2B] cursor-pointer flex items-center gap-1 hover:underline group">
+                        <Upload className="w-3.5 h-3.5 group-hover:-translate-y-0.5 transition-transform" />
+                        <span className="truncate max-w-[120px]">{docZipFileName || 'Upload ZIP'}</span>
+                        <input type="file" accept=".zip,.rar,.7z" className="hidden" onChange={handleUploadZip} />
+                      </label>
+                      {docZipFileName && (
+                        <>
+                          <div className="w-[1px] h-3 bg-[#E7D6C4] mx-0.5"></div>
+                          <button onClick={handleDownloadZip} className="text-[#8B5A2B] hover:text-[#A66B37] p-0.5 rounded hover:bg-[#F5EDE4] transition-colors" title="Download ZIP">
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    
+                    {/* Mark Sheet as Done / Completion Status */}
+                    <div className="ml-2 flex items-center">
+                      {isCompletedState ? (
+                        <div className="text-[10px] bg-green-50 border border-green-200 text-green-700 px-2 py-1 rounded-lg font-bold flex items-center gap-1.5 shadow-sm">
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Done by {completedByState || 'Unknown'}</span>
+                          <span className="opacity-70 ml-1">
+                            {completedAtState ? new Date(completedAtState).toLocaleDateString(undefined, {month: 'short', day: 'numeric'}) : ''}
+                          </span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Mark this entire sheet as Done? All incomplete test cases will be marked as Fixed.')) {
+                              const now = new Date().toISOString();
+                              const resolverName = currentUser?.name || 'Unknown';
+                              
+                              // Update all cases to Fixed
+                              testCases.forEach(tc => {
+                                if (tc.status !== 'Fixed') {
+                                  onSaveTestCase({
+                                    ...tc,
+                                    status: 'Fixed',
+                                    resolved_by: resolverName,
+                                    resolved_at: now
+                                  });
+                                }
+                              });
+                              
+                              // Update the document
+                              if (currentDoc) {
+                                saveDocument({
+                                  ...currentDoc,
+                                  is_completed: true,
+                                  completed_by: resolverName,
+                                  completed_at: now
+                                });
+                                addActivityLog(currentDoc.project_id, `Sheet "${currentDoc.name}" marked as DONE`);
+                                
+                                // Update local state so it turns green immediately
+                                setIsCompletedState(true);
+                                setCompletedByState(resolverName);
+                                setCompletedAtState(now);
+                              }
+                            }
+                          }}
+                          className="text-[10px] bg-white border border-[#E7D6C4] text-[#8B5A2B] hover:bg-green-50 hover:text-green-700 hover:border-green-200 px-2 py-1 rounded-lg font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          Mark Sheet as Done
+                        </button>
+                      )}
+                    </div>
+
+                  </div>
+                );
               })()}
             </div>
           )}

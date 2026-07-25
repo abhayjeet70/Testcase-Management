@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
 import { Users, UserPlus, Shield, Edit2, Trash2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { User } from '../../types';
+import { User, Project } from '../../types';
 import UserManagementModal from '../dashboard/UserManagementModal';
+import { getProjects } from '../../utils/storage';
 
 export default function TeamManagementModule() {
   const { users, adminDeleteUser, currentUser } = useAuth();
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  
+  // Get all projects to find assignments
+  const [projects] = useState<Project[]>(() => getProjects());
 
   const showInternalToast = (text: string, type: 'success' | 'error') => {
     setToastMsg({ text, type });
@@ -62,7 +66,7 @@ export default function TeamManagementModule() {
           <div>
             <h2 className="text-lg font-bold text-[#3B2A1D] leading-none flex items-center gap-2">
               Team Management
-              <span className="bg-[#8B5A2B]/10 text-[#8B5A2B] text-[10px] font-bold px-2 py-0.5 rounded-full">Admin Only</span>
+              <span className="bg-[#8B5A2B]/10 text-[#8B5A2B] text-[10px] font-bold px-2 py-0.5 rounded-full">Admin & Team Lead</span>
             </h2>
             <p className="text-xs text-[#7A6A5A] font-semibold mt-1">Add employees, interns, testers and set their login credentials</p>
           </div>
@@ -86,9 +90,10 @@ export default function TeamManagementModule() {
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="border-b border-[#E7D6C4] text-[#7A6A5A] font-semibold h-10 bg-gray-50/50">
-                <th className="px-5 py-3 w-1/3">Name</th>
+                <th className="px-5 py-3 w-1/4">Name</th>
                 <th className="px-5 py-3 w-1/4">Email / Login</th>
                 <th className="px-5 py-3 w-1/6">Role</th>
+                <th className="px-5 py-3 w-1/5">Assigned Projects</th>
                 <th className="px-5 py-3 text-right">Joined</th>
                 <th className="px-5 py-3 text-right">Actions</th>
               </tr>
@@ -120,6 +125,25 @@ export default function TeamManagementModule() {
                       {user.role === 'admin' && <Shield className="w-3 h-3" />}
                       {(user.role || 'user').replace('_', ' ')}
                     </span>
+                  </td>
+                  <td className="px-5 py-4">
+                    <div className="flex flex-wrap gap-1.5">
+                      {(() => {
+                        const userProjects = projects.filter(p => 
+                          p.tester_id === user.id || 
+                          p.intern_id === user.id || 
+                          (p.developer && p.developer.toLowerCase() === (user.name || '').toLowerCase())
+                        );
+                        if (userProjects.length === 0) {
+                          return <span className="text-[10px] text-[#7A6A5A] italic">None</span>;
+                        }
+                        return userProjects.map(p => (
+                          <span key={p.id} className="bg-[#FFF4E8] text-[#8B5A2B] text-[10px] font-bold px-2 py-0.5 rounded border border-[#E7D6C4]/50 truncate max-w-[120px]" title={p.project_name}>
+                            {p.project_name}
+                          </span>
+                        ));
+                      })()}
+                    </div>
                   </td>
                   <td className="px-5 py-4 text-right text-[#7A6A5A] text-xs">
                     {formatDateOnly(user.createdAt)}

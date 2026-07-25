@@ -12,7 +12,7 @@ interface BugTrackerProps {
 }
 
 export default function BugTracker({ projects, selectedProjectId, testCases = [], onSaveTestCase }: BugTrackerProps) {
-  const { users } = useAuth();
+  const { users, currentUser } = useAuth();
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('kanban');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -31,7 +31,12 @@ export default function BugTracker({ projects, selectedProjectId, testCases = []
     if (!onSaveTestCase) return;
     const tc = testCases.find(t => t.id === id);
     if (tc) {
-      onSaveTestCase({ ...tc, status: newStatus });
+      const updated = { ...tc, status: newStatus };
+      if (newStatus === 'Fixed') {
+        updated.resolved_by = currentUser?.name || 'Unknown';
+        updated.resolved_at = new Date().toISOString();
+      }
+      onSaveTestCase(updated);
     }
   };
 
