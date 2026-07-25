@@ -11,6 +11,7 @@ import { generateTestCaseNo } from '../../utils/testCaseIdGenerator';
 import { getDefaultStatus } from '../../utils/appSettings';
 import { isModKey } from '../../constants/keyboardShortcuts';
 import { findSimilarTitles } from '../../utils/duplicateDetection';
+import { supabase } from '../../lib/supabase';
 
 interface TestCaseTableProps {
   testCases: TestCase[];
@@ -75,10 +76,28 @@ export default function TestCaseTable({
     }
   }, [currentDoc, projectId]);
 
-  const handleDownloadZip = () => {
-    if (!docZipFileData || !docZipFileName) return;
+  const handleDownloadZip = async () => {
+    if (!projectId || !docZipFileName) return;
+
+    let dataUrl = docZipFileData;
+    if (!dataUrl) {
+      const { data, error } = await supabase
+        .from('tc_projects')
+        .select('zip_file_data')
+        .eq('id', projectId)
+        .single();
+      
+      if (data?.zip_file_data) {
+        dataUrl = data.zip_file_data;
+        setDocZipFileData(dataUrl);
+      } else {
+        alert("No ZIP file data found in the database.");
+        return;
+      }
+    }
+    
     const link = document.createElement('a');
-    link.href = docZipFileData;
+    link.href = dataUrl;
     link.download = docZipFileName;
     document.body.appendChild(link);
     link.click();
