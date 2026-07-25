@@ -11,12 +11,10 @@ import ProjectList from './components/projects/ProjectList';
 import ProjectsManager from './components/projects/ProjectsManager';
 import Dashboard from './components/dashboard/Dashboard';
 import TestCaseTable from './components/table/TestCaseTable';
-import AITestCaseGenerator from './components/dashboard/AITestCaseGenerator';
 import CsvToWordConverter from './components/dashboard/CsvToWordConverter';
 import TeamActivityLog from './components/dashboard/TeamActivityLog';
 import DownloadHistory, { recordDownloadEvent } from './components/dashboard/DownloadHistory';
 import RecycleBin from './components/dashboard/RecycleBin';
-import TemplatesManager from './components/dashboard/TemplatesManager';
 import WorkspaceSettings from './components/settings/WorkspaceSettings';
 import WorkspaceSearchDialog from './components/search/WorkspaceSearchDialog';
 import CommandPalette from './components/command/CommandPalette';
@@ -140,6 +138,57 @@ function MainApp() {
   // Initial mount: load data
   useEffect(() => {
     initializeStorage();
+    
+    // ONE-TIME CLEANUP: Remove base64 images and zips from localStorage to fix QuotaExceededError
+    try {
+      // 1. Clean test cases
+      const tcRaw = localStorage.getItem('tc_test_cases');
+      if (tcRaw) {
+        let tcArray = JSON.parse(tcRaw);
+        let cleaned = false;
+        tcArray = tcArray.map((tc: any) => {
+          if (tc.screenshots && Array.isArray(tc.screenshots)) {
+            const hasBase64 = tc.screenshots.some((s: any) => s.image_url && s.image_url.startsWith('data:image'));
+            if (hasBase64) {
+              cleaned = true;
+              return {
+                ...tc,
+                screenshots: tc.screenshots.filter((s: any) => !s.image_url || !s.image_url.startsWith('data:image'))
+              };
+            }
+          }
+          return tc;
+        });
+        if (cleaned) {
+          localStorage.setItem('tc_test_cases', JSON.stringify(tcArray));
+          console.log('Cleaned up legacy Base64 images from localStorage to free up quota.');
+        }
+      }
+      
+      // 2. Clean projects (zip files)
+      const projRaw = localStorage.getItem('tc_projects');
+      if (projRaw) {
+        let projArray = JSON.parse(projRaw);
+        let cleaned = false;
+        projArray = projArray.map((p: any) => {
+          if (p.zip_file_data && p.zip_file_data.startsWith('data:')) {
+            cleaned = true;
+            return {
+              ...p,
+              zip_file_data: undefined,
+              zip_file_name: undefined
+            };
+          }
+          return p;
+        });
+        if (cleaned) {
+          localStorage.setItem('tc_projects', JSON.stringify(projArray));
+          console.log('Cleaned up legacy Base64 ZIPs from localStorage to free up quota.');
+        }
+      }
+    } catch(e) {
+      console.error('Error cleaning up local storage', e);
+    }
     
     // Check if user is logged into Supabase
     const checkSupabase = async () => {
@@ -1201,13 +1250,6 @@ function MainApp() {
               onToggleFavorite={handleToggleFavorite}
               onSelectTab={setActiveTab}
             />
-          ) : activeTab === 'AIGenerator' ? (
-            <AITestCaseGenerator
-              projects={projects}
-              selectedProjectId={selectedProjectId}
-              onImportGenerated={handleImportGenerated}
-              showToast={showToast}
-            />
           ) : activeTab === 'CSVConverter' ? (
             <CsvToWordConverter 
               showToast={showToast} 
@@ -1225,8 +1267,6 @@ function MainApp() {
             <RecycleBin
               showToast={showToast}
             />
-          ) : activeTab === 'Templates' ? (
-            <TemplatesManager showToast={showToast} onApplied={() => refreshData()} />
           ) : activeTab === 'Settings' ? (
             <WorkspaceSettings
               selectedProjectId={selectedProjectId}
@@ -1357,10 +1397,22 @@ function MainApp() {
                 className="w-full px-3.5 py-2 border border-[#E7D6C4] rounded-xl text-xs bg-[#FFF8F2]/30 text-[#3B2A1D] focus:ring-1 focus:ring-[#8B5A2B] focus:outline-hidden"
               />
               <div className="rounded-xl border border-[#E7D6C4] bg-[#FFF8F2]/40 p-3 text-[11px] text-[#3B2A1D] space-y-1">
-                <div className="flex justify-between"><span className="text-[#7A6A5A]">Project</span><span className="font-semibold">{activeProjectName}</span></div>
-                <div className="flex justify-between"><span className="text-[#7A6A5A]">Document</span><span className="font-semibold">{activeDocumentName || 'Untitled File'}</span></div>
-                <div className="flex justify-between"><span className="text-[#7A6A5A]">Test Cases</span><span className="font-semibold">{testCases.length}</span></div>
-                <div className="flex justify-between"><span className="text-[#7A6A5A]">Estimated Size</span><span className="font-semibold">Word ~{wordSizeEstimate} • CSV ~{csvSizeEstimate}</span></div>
+                <div className="flex justify-between items-center"><span className="text-[#7A6A5A]">Project</span><span className="font-semibold">{activeProjectName}</span></div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[#7A6A5A]">Document</span>
+                  <select 
+                    className="bg-transparent font-semibold focus:outline-none text-right cursor-pointer text-[#3B2A1D] truncate max-w-[200px] border-b border-dashed border-[#E7D6C4] pb-0.5"
+                    value={selectedDocumentId || ''}
+                    onChange={(e) => setSelectedDocumentId(e.target.value)}
+                  >
+                    {!selectedDocumentId && <option value="">Select a document...</option>}
+                    {getDocuments(selectedProjectId || '').map(doc => (
+                      <option key={doc.id} value={doc.id}>{doc.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex justify-between items-center"><span className="text-[#7A6A5A]">Test Cases</span><span className="font-semibold">{testCases.length}</span></div>
+                <div className="flex justify-between items-center"><span className="text-[#7A6A5A]">Estimated Size</span><span className="font-semibold">Word ~{wordSizeEstimate} • CSV ~{csvSizeEstimate}</span></div>
               </div>
             </div>
 

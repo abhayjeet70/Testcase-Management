@@ -41,3 +41,27 @@ ADD COLUMN IF NOT EXISTS completed_by TEXT;
 ALTER TABLE public.tc_activity_logs
 ADD COLUMN IF NOT EXISTS user_name TEXT,
 ADD COLUMN IF NOT EXISTS user_role TEXT;
+
+-- Create Storage Buckets for files
+INSERT INTO storage.buckets (id, name, public) VALUES ('screenshots', 'screenshots', true) ON CONFLICT (id) DO NOTHING;
+INSERT INTO storage.buckets (id, name, public) VALUES ('project_files', 'project_files', true) ON CONFLICT (id) DO NOTHING;
+
+-- Policies for screenshots bucket
+DROP POLICY IF EXISTS "Public Access Screenshots" ON storage.objects;
+CREATE POLICY "Public Access Screenshots" ON storage.objects FOR SELECT USING (bucket_id = 'screenshots');
+
+DROP POLICY IF EXISTS "Auth Upload Screenshots" ON storage.objects;
+CREATE POLICY "Auth Upload Screenshots" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'screenshots');
+
+DROP POLICY IF EXISTS "Auth Delete Screenshots" ON storage.objects;
+CREATE POLICY "Auth Delete Screenshots" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'screenshots');
+
+-- Policies for project_files bucket
+DROP POLICY IF EXISTS "Public Access Project Files" ON storage.objects;
+CREATE POLICY "Public Access Project Files" ON storage.objects FOR SELECT USING (bucket_id = 'project_files');
+
+DROP POLICY IF EXISTS "Auth Upload Project Files" ON storage.objects;
+CREATE POLICY "Auth Upload Project Files" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'project_files');
+
+DROP POLICY IF EXISTS "Auth Delete Project Files" ON storage.objects;
+CREATE POLICY "Auth Delete Project Files" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'project_files');

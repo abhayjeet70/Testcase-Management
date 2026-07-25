@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ActivityLog } from '../../types';
 import { getActivityLogs, getProjects } from '../../utils/storage';
+import { useAuth } from '../../contexts/AuthContext';
 import { Clock, Filter, Search, CheckCircle, Bug, FileText, User as UserIcon } from 'lucide-react';
 
 interface TeamActivityLogProps {
@@ -11,6 +12,8 @@ export default function TeamActivityLog({ showToast }: TeamActivityLogProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [timeFilter, setTimeFilter] = useState('all'); // 'all', 'today', '7days', '30days'
   const [projectFilter, setProjectFilter] = useState('all'); // 'all' or project_id
+  
+  const { users } = useAuth();
   
   // Aggregate all logs from all projects
   const projects = getProjects();
@@ -141,9 +144,20 @@ export default function TeamActivityLog({ showToast }: TeamActivityLogProps) {
                     </div>
                     <div className="mt-2.5 flex items-center gap-3 text-xs text-[#7A6A5A]">
                       {project && (
-                        <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md font-bold">
-                          Project: {project.project_name}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md font-bold">
+                            Project: {project.project_name}
+                          </span>
+                          {(project.tester_id || project.intern_id || project.developer) && (
+                            <span className="bg-[#FFF8F2] text-[#8B5A2B] px-2 py-0.5 rounded-md text-[10px] font-bold border border-[#E7D6C4]">
+                              Team: {[
+                                project.tester_id ? `Tester: ${users.find(u => u.id === project.tester_id)?.name || 'Assigned'}` : null,
+                                project.intern_id ? `Intern: ${users.find(u => u.id === project.intern_id)?.name || 'Assigned'}` : null,
+                                project.developer ? `Dev: ${project.developer}` : null
+                              ].filter(Boolean).join(' • ')}
+                            </span>
+                          )}
+                        </div>
                       )}
                       {log.test_case_no && (
                         <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md font-bold border border-gray-200">

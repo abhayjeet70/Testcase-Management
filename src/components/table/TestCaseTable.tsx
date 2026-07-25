@@ -13,6 +13,7 @@ import { getDefaultStatus } from '../../utils/appSettings';
 import { isModKey } from '../../constants/keyboardShortcuts';
 import { findSimilarTitles } from '../../utils/duplicateDetection';
 import { supabase } from '../../lib/supabase';
+import { uploadFileToSupabase } from '../../utils/uploadMedia';
 
 interface TestCaseTableProps {
   testCases: TestCase[];
@@ -128,27 +129,31 @@ export default function TestCaseTable({
     await downloadDataUrl(dataUrl, docZipFileName);
   };
 
-  const handleUploadZip = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadZip = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setDocZipFileName(file.name);
       
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          setDocZipFileData(reader.result);
-          
-          // instantly save to project
-          const projects = getProjects();
-          const parentProj = projects.find(p => p.id === projectId);
-          if (parentProj) {
-            parentProj.zip_file_name = file.name;
-            parentProj.zip_file_data = reader.result;
-            saveProject(parentProj);
-          }
+      try {
+        setSaveStatus('Saving...');
+        const publicUrl = await uploadFileToSupabase(file, 'project_files');
+        
+        setDocZipFileData(publicUrl);
+        
+        // instantly save to project
+        const projects = getProjects();
+        const parentProj = projects.find(p => p.id === projectId);
+        if (parentProj) {
+          parentProj.zip_file_name = file.name;
+          parentProj.zip_file_data = publicUrl;
+          saveProject(parentProj);
         }
-      };
-      reader.readAsDataURL(file);
+        setSaveStatus('Saved');
+      } catch (error) {
+        console.error("ZIP upload failed", error);
+        setSaveStatus('Error');
+        alert("Failed to upload ZIP file. Ensure you are connected and the file is valid.");
+      }
     }
   };
 
@@ -654,7 +659,7 @@ export default function TestCaseTable({
   };
 
   // Paste Screenshot Handler
-  const handlePasteScreenshot = (e: React.ClipboardEvent, tcId: string) => {
+  const handlePasteScreenshot = async (e: React.ClipboardEvent, tcId: string) => {
     const items = e.clipboardData?.items;
     if (items) {
       for (const item of Array.from(items)) {
@@ -666,15 +671,18 @@ export default function TestCaseTable({
               delete next[tcId];
               return next;
             });
-            const reader = new FileReader();
-            reader.onload = (evt) => {
-              const base64Url = evt.target?.result as string;
+            
+            try {
+              setSaveStatus('Saving...');
+              const publicUrl = await uploadFileToSupabase(file, 'screenshots');
+              
               const newScreenshot: Screenshot = {
                 id: generateId(),
                 test_case_id: tcId,
-                image_url: base64Url,
+                image_url: publicUrl,
                 created_at: new Date().toISOString()
               };
+              
               const original = testCases.find(tc => tc.id === tcId);
               if (original) {
                 const updated = {
@@ -684,8 +692,11 @@ export default function TestCaseTable({
                 onSaveTestCase(updated);
                 setSaveStatus('Saved');
               }
-            };
-            reader.readAsDataURL(file);
+            } catch (error) {
+              console.error("Failed to upload screenshot", error);
+              setSaveStatus('Error');
+              alert("Failed to upload screenshot to cloud storage.");
+            }
           }
         }
       }
@@ -697,7 +708,7 @@ export default function TestCaseTable({
     e.preventDefault();
   };
 
-  const handleDropScreenshot = (e: React.DragEvent, tcId: string) => {
+  const handleDropScreenshot = async (e: React.DragEvent, tcId: string) => {
     e.preventDefault();
     const files = e.dataTransfer?.files;
     if (files && files.length > 0) {
@@ -707,13 +718,15 @@ export default function TestCaseTable({
         return next;
       });
       const file = files[0];
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        const base64Url = evt.target?.result as string;
+      
+      try {
+        setSaveStatus('Saving...');
+        const publicUrl = await uploadFileToSupabase(file, 'screenshots');
+        
         const newScreenshot: Screenshot = {
           id: generateId(),
           test_case_id: tcId,
-          image_url: base64Url,
+          image_url: publicUrl,
           created_at: new Date().toISOString()
         };
         const original = testCases.find(tc => tc.id === tcId);
@@ -725,12 +738,15 @@ export default function TestCaseTable({
           onSaveTestCase(updated);
           setSaveStatus('Saved');
         }
-      };
-      reader.readAsDataURL(file);
+      } catch (error) {
+        console.error("Failed to upload dropped screenshot", error);
+        setSaveStatus('Error');
+        alert("Failed to upload screenshot to cloud storage.");
+      }
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, tcId: string) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>, tcId: string) => {
     const files = e.target.files;
     if (files && files.length > 0) {
       setBrokenImages(prev => {
@@ -738,13 +754,16 @@ export default function TestCaseTable({
         delete next[tcId];
         return next;
       });
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        const base64Url = evt.target?.result as string;
+      const file = files[0];
+      
+      try {
+        setSaveStatus('Saving...');
+        const publicUrl = await uploadFileToSupabase(file, 'screenshots');
+        
         const newScreenshot: Screenshot = {
           id: generateId(),
           test_case_id: tcId,
-          image_url: base64Url,
+          image_url: publicUrl,
           created_at: new Date().toISOString()
         };
         const original = testCases.find(tc => tc.id === tcId);
@@ -756,8 +775,11 @@ export default function TestCaseTable({
           onSaveTestCase(updated);
           setSaveStatus('Saved');
         }
-      };
-      reader.readAsDataURL(files[0]);
+      } catch (error) {
+        console.error("Failed to upload selected screenshot", error);
+        setSaveStatus('Error');
+        alert("Failed to upload screenshot to cloud storage.");
+      }
     }
   };
 

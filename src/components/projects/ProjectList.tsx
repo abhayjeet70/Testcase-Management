@@ -82,162 +82,140 @@ export default function ProjectList({
           onClick={onCloseMobile}
         />
       )}
-      <div className={`w-[260px] bg-[#FFF4E8] border-r border-[#E7D6C4] h-full flex flex-col justify-start select-none shrink-0 font-sans fixed md:relative z-40 transition-transform duration-300 ease-in-out top-0 left-0 ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
-      
-      {/* TOP HEADER / LOGO */}
-      <div className="p-5 border-b border-[#E7D6C4] shrink-0">
-        <div 
-          onClick={() => onSelectTab('Dashboard')}
-          className="flex items-center gap-2.5 cursor-pointer hover:opacity-90 transition-opacity"
-        >
-          <div className="bg-[#8B5A2B] text-white p-2 rounded-xl shadow-xs">
-            <Clipboard className="w-5 h-5" />
+      <div className={`group bg-[#FFF4E8] border-r border-[#E7D6C4] h-full flex flex-col justify-start select-none shrink-0 font-sans fixed md:relative z-40 transition-all duration-300 ease-in-out top-0 left-0 overflow-hidden whitespace-nowrap ${isMobileOpen ? 'translate-x-0 w-[260px]' : '-translate-x-full md:translate-x-0 md:w-[76px] md:hover:w-[260px]'}`}>
+        <div className="w-[260px] h-full flex flex-col">
+          
+          {/* TOP HEADER / LOGO */}
+          <div className="p-5 border-b border-[#E7D6C4] shrink-0">
+            <div 
+              onClick={() => onSelectTab('Dashboard')}
+              className="flex items-center gap-4 cursor-pointer hover:opacity-90 transition-opacity"
+            >
+              <div className="bg-[#8B5A2B] text-white p-2 rounded-xl shadow-xs shrink-0 flex items-center justify-center">
+                <Clipboard className="w-5 h-5" />
+              </div>
+              <div className={`transition-opacity duration-200 ${isMobileOpen ? 'opacity-100' : 'md:opacity-0 md:group-hover:opacity-100'}`}>
+                <h1 className="text-[13px] font-bold text-[#3B2A1D] uppercase tracking-wider leading-none">TestCase</h1>
+                <p className="text-[11px] text-[#7A6A5A] font-semibold mt-0.5">Management Suite</p>
+              </div>
+            </div>
           </div>
-          <div>
-            <h1 className="text-[13px] font-bold text-[#3B2A1D] uppercase tracking-wider leading-none">TestCase</h1>
-            <p className="text-[11px] text-[#7A6A5A] font-semibold mt-0.5">Management Suite</p>
-          </div>
-        </div>
-      </div>
 
-      {/* PRIMARY TABS SYSTEM */}
-      <div className="px-3 py-4 space-y-1 text-xs font-semibold flex-1 overflow-y-auto">
+          {/* PRIMARY TABS SYSTEM */}
+          <div className="px-3 py-4 space-y-1 text-xs font-semibold flex-1 overflow-x-hidden overflow-y-auto hidden-scrollbar">
         <button
           onClick={() => onSelectTab('Dashboard')}
-          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all ${
+          className={`w-full flex items-center gap-4 px-4 py-2.5 rounded-xl transition-all ${
             activeTab === 'Dashboard' 
               ? 'bg-[#8B5A2B] text-white shadow-xs' 
               : 'text-[#7A6A5A] hover:text-[#3B2A1D] hover:bg-[#FFF8F2]'
           }`}
         >
-          <BarChart2 className="w-4 h-4" />
-          Analytics Dashboard
+          <BarChart2 className="w-5 h-5 shrink-0" />
+          <span className={`transition-opacity duration-200 ${isMobileOpen ? 'opacity-100' : 'md:opacity-0 md:group-hover:opacity-100'}`}>Analytics Dashboard</span>
         </button>
 
         <button
           onClick={() => onSelectTab('WorkspaceProjects')}
-          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all ${
+          className={`w-full flex items-center gap-4 px-4 py-2.5 rounded-xl transition-all ${
             activeTab === 'WorkspaceProjects' 
               ? 'bg-[#8B5A2B] text-white shadow-xs font-bold' 
               : 'text-[#7A6A5A] hover:text-[#3B2A1D] hover:bg-[#FFF8F2]'
           }`}
         >
-          <FolderOpen className="w-4 h-4" />
-          Workspace Projects
+          <FolderOpen className="w-5 h-5 shrink-0" />
+          <span className={`transition-opacity duration-200 ${isMobileOpen ? 'opacity-100' : 'md:opacity-0 md:group-hover:opacity-100'}`}>Workspace Projects</span>
         </button>
 
         <button
           onClick={() => onSelectTab('Projects')}
-          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all ${
+          className={`w-full flex items-center gap-4 px-4 py-2.5 rounded-xl transition-all ${
             activeTab === 'Projects' 
               ? 'bg-[#8B5A2B] text-white shadow-xs' 
               : 'text-[#7A6A5A] hover:text-[#3B2A1D] hover:bg-[#FFF8F2]'
           }`}
         >
-          <FolderOpen className="w-4 h-4" />
-          Test Cases Spreadsheet
+          <FolderOpen className="w-5 h-5 shrink-0" />
+          <span className={`transition-opacity duration-200 ${isMobileOpen ? 'opacity-100' : 'md:opacity-0 md:group-hover:opacity-100'}`}>Test Cases Spreadsheet</span>
         </button>
 
         <button
           onClick={() => onSelectTab('BugTracker')}
-          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all ${
+          className={`w-full flex items-center gap-4 px-4 py-2.5 rounded-xl transition-all ${
             activeTab === 'BugTracker' 
               ? 'bg-[#8B5A2B] text-white shadow-xs font-bold' 
               : 'text-[#7A6A5A] hover:text-[#3B2A1D] hover:bg-[#FFF8F2]'
           }`}
         >
-          <Bug className="w-4 h-4 text-red-500 group-hover:text-red-600" />
-          Bug Tracker
-        </button>
-
-        <button
-          onClick={() => onSelectTab('AIGenerator')}
-          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all ${
-            activeTab === 'AIGenerator' 
-              ? 'bg-[#8B5A2B] text-white shadow-xs font-bold' 
-              : 'text-[#7A6A5A] hover:text-[#3B2A1D] hover:bg-[#FFF8F2]'
-          }`}
-        >
-          <Sparkles className="w-4 h-4 text-amber-600 group-hover:text-amber-700" />
-          AI Test Case Generator
+          <Bug className="w-5 h-5 shrink-0 text-red-500 group-hover:text-red-600" />
+          <span className={`transition-opacity duration-200 ${isMobileOpen ? 'opacity-100' : 'md:opacity-0 md:group-hover:opacity-100'}`}>Bug Tracker</span>
         </button>
 
         <button
           onClick={() => onSelectTab('CSVConverter')}
-          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all ${
+          className={`w-full flex items-center gap-4 px-4 py-2.5 rounded-xl transition-all ${
             activeTab === 'CSVConverter' 
               ? 'bg-[#8B5A2B] text-white shadow-xs font-bold' 
               : 'text-[#7A6A5A] hover:text-[#3B2A1D] hover:bg-[#FFF8F2]'
           }`}
         >
-          <FileText className="w-4 h-4" />
-          CSV-to-Word Converter
+          <FileText className="w-5 h-5 shrink-0" />
+          <span className={`transition-opacity duration-200 ${isMobileOpen ? 'opacity-100' : 'md:opacity-0 md:group-hover:opacity-100'}`}>CSV-to-Word Converter</span>
         </button>
 
         <button
           onClick={() => onSelectTab('TeamActivity')}
-          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all ${
+          className={`w-full flex items-center gap-4 px-4 py-2.5 rounded-xl transition-all ${
             activeTab === 'TeamActivity' 
               ? 'bg-[#8B5A2B] text-white shadow-xs font-bold' 
               : 'text-[#7A6A5A] hover:text-[#3B2A1D] hover:bg-[#FFF8F2]'
           }`}
         >
-          <Clock className="w-4 h-4" />
-          Team Activity / Logs
-        </button>
-
-        <button
-          onClick={() => onSelectTab('Templates')}
-          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all ${
-            activeTab === 'Templates' 
-              ? 'bg-[#8B5A2B] text-white shadow-xs font-bold' 
-              : 'text-[#7A6A5A] hover:text-[#3B2A1D] hover:bg-[#FFF8F2]'
-          }`}
-        >
-          <FileStack className="w-4 h-4" />
-          Templates
+          <Clock className="w-5 h-5 shrink-0" />
+          <span className={`transition-opacity duration-200 ${isMobileOpen ? 'opacity-100' : 'md:opacity-0 md:group-hover:opacity-100'}`}>Team Activity / Logs</span>
         </button>
 
         <button
           onClick={() => onSelectTab('Settings')}
-          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all ${
+          className={`w-full flex items-center gap-4 px-4 py-2.5 rounded-xl transition-all ${
             activeTab === 'Settings' 
               ? 'bg-[#8B5A2B] text-white shadow-xs font-bold' 
               : 'text-[#7A6A5A] hover:text-[#3B2A1D] hover:bg-[#FFF8F2]'
           }`}
         >
-          <Sliders className="w-4 h-4" />
-          Settings
+          <Sliders className="w-5 h-5 shrink-0" />
+          <span className={`transition-opacity duration-200 ${isMobileOpen ? 'opacity-100' : 'md:opacity-0 md:group-hover:opacity-100'}`}>Settings</span>
         </button>
 
         {(currentUser?.role === 'admin' || currentUser?.role === 'team_lead') && (
           <button
             onClick={() => onSelectTab('TeamManagement')}
-            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all ${
+            className={`w-full flex items-center gap-4 px-4 py-2.5 rounded-xl transition-all ${
               activeTab === 'TeamManagement' 
                 ? 'bg-[#8B5A2B] text-white shadow-xs font-bold' 
                 : 'text-[#7A6A5A] hover:text-[#3B2A1D] hover:bg-[#FFF8F2]'
             }`}
           >
-            <Users className="w-4 h-4 text-purple-600 group-hover:text-purple-700" />
-            Team Management
+            <Users className="w-5 h-5 shrink-0 text-purple-600 group-hover:text-purple-700" />
+            <span className={`transition-opacity duration-200 ${isMobileOpen ? 'opacity-100' : 'md:opacity-0 md:group-hover:opacity-100'}`}>Team Management</span>
           </button>
         )}
 
         <button
           onClick={() => onSelectTab('RecycleBin')}
-          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all ${
+          className={`w-full flex items-center gap-4 px-4 py-2.5 rounded-xl transition-all ${
             activeTab === 'RecycleBin' 
               ? 'bg-[#8B5A2B] text-white shadow-xs font-bold' 
               : 'text-[#7A6A5A] hover:text-[#3B2A1D] hover:bg-[#FFF8F2]'
           }`}
         >
-          <Trash2 className="w-4 h-4" />
-          Recycle Bin
+          <Trash2 className="w-5 h-5 shrink-0" />
+          <span className={`transition-opacity duration-200 ${isMobileOpen ? 'opacity-100' : 'md:opacity-0 md:group-hover:opacity-100'}`}>Recycle Bin</span>
         </button>
       </div>
 
-          </div>
+      </div>
+      </div>
     </>
   );
 }

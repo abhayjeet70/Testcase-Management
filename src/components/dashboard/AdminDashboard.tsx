@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { 
   CheckCircle, XCircle, AlertTriangle, HelpCircle, 
   Layers, FileText, ClipboardList, Activity, ArrowUpRight, Clock,
-  Users, UserPlus, Shield
+  Users, UserPlus, Shield, X
 } from 'lucide-react';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
@@ -31,6 +31,7 @@ export default function AdminDashboard({
   const { users } = useAuth();
   const [toastMsg, setToastMsg] = React.useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [recentDownloads, setRecentDownloads] = React.useState<any[]>([]);
+  const [selectedStatCard, setSelectedStatCard] = React.useState<string | null>(null);
 
   const showInternalToast = (text: string, type: 'success' | 'error') => {
     setToastMsg({ text, type });
@@ -264,16 +265,20 @@ export default function AdminDashboard({
       </div>
 
       {/* STATISTICS CARDS */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 relative">
+        {selectedStatCard && (
+          <div className="fixed inset-0 z-40" onClick={() => setSelectedStatCard(null)} />
+        )}
         {stats.map((stat, i) => (
           <motion.div
             key={stat.id}
             id={stat.id}
+            onClick={() => setSelectedStatCard(stat.id)}
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.05 }}
             whileHover={{ y: -4, boxShadow: '0 10px 25px -5px rgba(139,90,43,0.08)' }}
-            className={`bg-white border ${stat.border} rounded-2xl p-4 flex flex-col justify-between shadow-xs transition-all`}
+            className={`relative bg-white border ${stat.border} rounded-2xl p-4 flex flex-col justify-between shadow-xs transition-all cursor-pointer ${selectedStatCard === stat.id ? 'ring-2 ring-[#8B5A2B] z-50' : 'z-10'}`}
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-medium text-[#7A6A5A] truncate">{stat.title}</span>
@@ -285,6 +290,96 @@ export default function AdminDashboard({
               <h3 className="text-2xl font-bold text-[#3B2A1D] tracking-tight">{stat.value}</h3>
               <p className="text-[11px] text-[#7A6A5A] mt-0.5 truncate">{stat.description}</p>
             </div>
+
+            {/* DROPDOWN POPUP */}
+            {selectedStatCard === stat.id && (() => {
+              let breakdown: { name: string; totalCount: number; issueCount: number; specificCount?: number }[] = [];
+              
+              if (stat.id === 'stat-total') {
+                breakdown = projects.map(p => {
+                  const cases = getDocuments(p.id).flatMap(d => getTestCases(d.id));
+                  return {
+                    name: p.project_name || 'Untitled',
+                    totalCount: cases.length,
+                    issueCount: cases.filter(c => c.status === 'Not Fixed' || c.status === 'In Progress' || c.status === 'Blocked').length
+                  };
+                }).filter(p => p.totalCount > 0);
+              } else {
+                let statusFilter = '';
+                if (stat.id === 'stat-fixed') statusFilter = 'Fixed';
+                else if (stat.id === 'stat-notfixed') statusFilter = 'Not Fixed';
+                else if (stat.id === 'stat-inprogress') statusFilter = 'In Progress';
+                else if (stat.id === 'stat-blocked') statusFilter = 'Blocked';
+                else if (stat.id === 'stat-nottested') statusFilter = 'Not Tested';
+                
+                breakdown = projects.map(p => {
+                  const cases = getDocuments(p.id).flatMap(d => getTestCases(d.id));
+                  return {
+                    name: p.project_name || 'Untitled',
+                    totalCount: cases.length,
+                    issueCount: 0,
+                    specificCount: cases.filter(c => c.status === statusFilter).length
+                  };
+                }).filter(p => (p.specificCount || 0) > 0);
+              }
+
+              const alignmentClass = i >= 3 ? 'right-0' : 'left-0';
+
+              return (
+                <div 
+                  className={`absolute top-[105%] ${alignmentClass} z-50 w-[280px] bg-white rounded-xl shadow-2xl border border-[#E7D6C4] overflow-hidden flex flex-col animate-fade-in cursor-default`} 
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="px-3 py-2 border-b border-[#E7D6C4] flex items-center justify-between bg-[#FFF8F2]">
+                    <div className="flex items-center gap-2">
+                      <div className={`p-1.5 rounded-lg ${stat.color}`}>
+                        <stat.icon className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <h2 className="text-[11px] font-bold text-[#3B2A1D] leading-tight">{stat.title}</h2>
+                        <p className="text-[9px] text-[#7A6A5A]">{stat.value} Total</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setSelectedStatCard(null)} className="p-1 hover:bg-[#E7D6C4]/50 rounded-full text-[#7A6A5A] transition-colors cursor-pointer">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="p-2 max-h-[30vh] overflow-y-auto hidden-scrollbar">
+                    {breakdown.length > 0 ? (
+                      <div className="space-y-1.5">
+                        {breakdown.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-2 rounded-lg border border-gray-100 hover:border-[#E7D6C4] hover:bg-[#FFF8F2]/50 transition-colors">
+                            <span className="text-[10px] font-semibold text-[#3B2A1D] flex-1 min-w-0 truncate pr-2" title={item.name}>{item.name}</span>
+                            <div className="shrink-0">
+                              {stat.id === 'stat-total' ? (
+                                <div className="flex flex-col items-end gap-1">
+                                  <span className="text-[9px] font-bold bg-white px-1.5 py-0.5 rounded shadow-xs border border-gray-100 text-gray-700">
+                                    {item.totalCount} Cases
+                                  </span>
+                                  {item.issueCount > 0 && (
+                                    <span className="text-[8px] font-bold bg-[#FF4D4F]/10 px-1.5 py-0.5 rounded text-[#FF4D4F] whitespace-nowrap">
+                                      {item.issueCount} Issues
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-[9px] font-bold bg-white px-1.5 py-0.5 rounded shadow-xs border border-gray-100 text-[#8B5A2B] whitespace-nowrap">
+                                  {item.specificCount}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-[#7A6A5A] text-[10px]">
+                        No data available.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </motion.div>
         ))}
       </div>
@@ -623,6 +718,9 @@ export default function AdminDashboard({
         </div>
         
       </div>
+
+
+
     </div>
   );
 }

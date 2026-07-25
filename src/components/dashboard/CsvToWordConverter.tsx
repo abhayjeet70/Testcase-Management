@@ -6,6 +6,7 @@ import {
 import { TestCase, Project, TestCaseDocument } from '../../types';
 import { generateId, saveDocument, saveTestCase, getDocuments } from '../../utils/storage';
 import { parseCsvContent, downloadDocxFile, downloadPdfFile } from '../../utils/documentServices';
+import { uploadFileToSupabase } from '../../utils/uploadMedia';
 
 interface CsvToWordConverterProps {
   showToast: (msg: string, type: 'success' | 'info' | 'error') => void;
@@ -46,20 +47,21 @@ export default function CsvToWordConverter({ showToast, selectedProjectId, proje
     }
   };
 
-  const handleScreenshotUpload = (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleScreenshotUpload = async (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    // Optimistic UI updates
+    setBrokenImages(prev => {
+      const next = { ...prev };
+      delete next[parsedCases[idx].id];
+      return next;
+    });
 
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const base64 = evt.target?.result as string;
+    try {
+      showToast("Uploading image...", "info");
+      const publicUrl = await uploadFileToSupabase(file, 'screenshots');
       
-      setBrokenImages(prev => {
-        const next = { ...prev };
-        delete next[parsedCases[idx].id];
-        return next;
-      });
-
       setParsedCases(prev => {
         const copy = [...prev];
         copy[idx] = {
@@ -67,15 +69,18 @@ export default function CsvToWordConverter({ showToast, selectedProjectId, proje
           screenshots: [{
             id: 'screenshot-' + generateId(),
             test_case_id: copy[idx].id,
-            image_url: base64,
+            image_url: publicUrl,
             created_at: new Date().toISOString()
           }],
           updated_at: new Date().toISOString()
         };
         return copy;
       });
-    };
-    reader.readAsDataURL(file);
+      showToast("Image uploaded successfully!", "success");
+    } catch (error: any) {
+      console.error("Failed to upload to Supabase", error);
+      showToast("Failed to upload image. Please try again.", "error");
+    }
     
     // Clear the input so the same file can be uploaded again if needed
     e.target.value = '';
@@ -269,22 +274,65 @@ TC-003,Empty Field Lockout,Verify strict frontend validation on required blank f
     }
 
     try {
+      // FORCE CLEANUP OF LOCAL STORAGE BEFORE SAVING TO PREVENT QUOTA EXCEEDED
+      try {
+        const tcRaw = localStorage.getItem('tc_test_cases');
+        if (tcRaw) {
+          let tcArray = JSON.parse(tcRaw);
+          let cleaned = false;
+          tcArray = tcArray.map((tc: any) => {
+            if (tc.screenshots && Array.isArray(tc.screenshots)) {
+              const hasBase64 = tc.screenshots.some((s: any) => s.image_url && s.image_url.startsWith('data:image'));
+              if (hasBase64) {
+                cleaned = true;
+                return { ...tc, screenshots: tc.screenshots.filter((s: any) => !s.image_url || !s.image_url.startsWith('data:image')) };
+              }
+            }
+            return tc;
+          });
+          if (cleaned) localStorage.setItem('tc_test_cases', JSON.stringify(tcArray));
+        }
+        const projRaw = localStorage.getItem('tc_projects');
+        if (projRaw) {
+          let projArray = JSON.parse(projRaw);
+          let cleaned = false;
+          projArray = projArray.map((p: any) => {
+            if (p.zip_file_data && p.zip_file_data.startsWith('data:')) {
+              cleaned = true;
+              return { ...p, zip_file_data: undefined, zip_file_name: undefined };
+            }
+            return p;
+          });
+          if (cleaned) localStorage.setItem('tc_projects', JSON.stringify(projArray));
+        }
+      } catch(e) {
+        console.error('Cleanup failed', e);
+      }
+
+      // Scrub base64 out of parsedCases that are about to be saved
+      const safeParsedCases = parsedCases.map(tc => {
+        if (tc.screenshots && tc.screenshots.length > 0) {
+          return {
+            ...tc,
+            screenshots: tc.screenshots.filter(s => !s.image_url || !s.image_url.startsWith('data:image'))
+          };
+        }
+        return tc;
+      });
+
       // 1. Get existing documents for the active project
       const existingDocs = getDocuments(selectedProjectId);
       
       // 2. Filter documents that match the base title to determine version
-      // E.g., if title is "My Ledger", we look for "My Ledger V0.docx", "My Ledger V1.docx", etc.
       const baseName = documentTitle.trim() || 'Imported CSV Ledger';
-      
-      // Regex to match exact baseName + space + V + number + .docx
       const regex = new RegExp(`^${escapeRegExp(baseName)} V(\\d+)\\.docx$`, 'i');
       
       let maxVersion = 0;
       existingDocs.forEach(doc => {
         const match = doc.name.match(regex);
         if (match) {
-          const v = parseInt(match[1], 10);
-          if (v > maxVersion) maxVersion = v;
+          const version = parseInt(match[1], 10);
+          if (version > maxVersion) maxVersion = version;
         }
       });
       
@@ -301,7 +349,7 @@ TC-003,Empty Field Lockout,Verify strict frontend validation on required blank f
       const savedDoc = saveDocument(newDocDraft);
       
       // 4. Save all test cases linked to this document
-      parsedCases.forEach((tc, idx) => {
+      safeParsedCases.forEach((tc, idx) => {
         const savedTc: Partial<TestCase> & { project_id: string; document_id: string } = {
           ...tc,
           id: 'tc-' + generateId() + '-' + idx, // generate new fresh ID for storage

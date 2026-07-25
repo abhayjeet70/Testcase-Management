@@ -670,17 +670,21 @@ export const saveTestCase = (testCase: Partial<TestCase> & { project_id: string;
       savedCase = allCases[idx];
 
       // Activity logging
-      if (testCase.status && testCase.status !== prevStatus) {
+      const changedFields: string[] = [];
+      const oldTc = allCases[idx];
+      
+      if (testCase.status !== undefined && oldTc.status !== testCase.status) changedFields.push(`status to "${testCase.status}"`);
+      if (testCase.issues !== undefined && oldTc.issues !== testCase.issues) changedFields.push(`issues`);
+      if (testCase.test_objective !== undefined && oldTc.test_objective !== testCase.test_objective) changedFields.push(`objective`);
+      if (testCase.test_steps !== undefined && oldTc.test_steps !== testCase.test_steps) changedFields.push(`steps`);
+      if (testCase.name !== undefined && oldTc.name !== testCase.name) changedFields.push(`name to "${testCase.name}"`);
+      if (testCase.screenshots !== undefined && JSON.stringify(oldTc.screenshots) !== JSON.stringify(testCase.screenshots)) changedFields.push(`screenshots`);
+      if (testCase.display_order !== undefined && oldTc.display_order !== testCase.display_order) changedFields.push(`display order`);
+
+      if (changedFields.length > 0) {
         addActivityLog(
           savedCase.project_id,
-          `Status updated to "${testCase.status}"`,
-          savedCase.id,
-          savedCase.test_case_no
-        );
-      } else {
-        addActivityLog(
-          savedCase.project_id,
-          `Updated fields: ${Object.keys(testCase).filter(k => k !== 'id' && k !== 'project_id' && k !== 'document_id').join(', ')}`,
+          `Updated test case: changed ${changedFields.join(', ')}`,
           savedCase.id,
           savedCase.test_case_no
         );
