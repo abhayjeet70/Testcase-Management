@@ -25,7 +25,7 @@ import ProfileSettingsModal from './components/settings/ProfileSettingsModal';
 import { Project, TestCase, CustomColumn, ActivityLog, TestCaseStatus, RecentItem } from './types';
 import { 
   initializeStorage, getProjects, saveProject, deleteProject, 
-  duplicateProject, getDocuments, saveDocument, getTestCases, saveTestCase, deleteTestCase, 
+  duplicateProject, getDocuments, saveDocument, getTestCases, getTestCasesAll, saveTestCase, deleteTestCase, 
   duplicateTestCase, reorderTestCases, getCustomColumns, 
   saveCustomColumn, deleteCustomColumn, getActivityLogs, addActivityLog,
   generateId, getDocumentsAll, archiveProject, restoreProject, deleteDocument,
@@ -134,6 +134,10 @@ function MainApp() {
   const [importNewProjectName, setImportNewProjectName] = useState('');
   const [importNewProjectDesc, setImportNewProjectDesc] = useState('');
   const [importSummary, setImportSummary] = useState<{projectName:string; documentName:string; importedCount:number; imageCount:number} | null>(null);
+
+  // Document name editing
+  const [isEditingDocumentName, setIsEditingDocumentName] = useState(false);
+  const [editingDocumentName, setEditingDocumentName] = useState('');
 
   // Initial mount: load data
   useEffect(() => {
@@ -663,9 +667,14 @@ function MainApp() {
         showToast('Please enter a project name for the new project.', 'error');
         return;
       }
-      const createdProject = saveProject({ project_name: importNewProjectName.trim(), description: importNewProjectDesc, owner_id: currentUser?.id });
-      targetProjectId = createdProject.id;
-      setSelectedProjectId(targetProjectId);
+      try {
+        const createdProject = saveProject({ project_name: importNewProjectName.trim(), description: importNewProjectDesc, owner_id: currentUser?.id });
+        targetProjectId = createdProject.id;
+        setSelectedProjectId(targetProjectId);
+      } catch (e: any) {
+        showToast(e.message || 'Failed to create project.', 'error');
+        return;
+      }
     }
 
     let targetDocId = '';
@@ -674,12 +683,17 @@ function MainApp() {
         showToast('Please enter a name for the new Test Case File.', 'error');
         return;
       }
-      const newDoc = saveDocument({
-        project_id: targetProjectId,
-        name: importNewFileName.trim(),
-        description: importNewFileDesc
-      });
-      targetDocId = newDoc.id;
+      try {
+        const newDoc = saveDocument({
+          project_id: targetProjectId,
+          name: importNewFileName.trim(),
+          description: importNewFileDesc
+        });
+        targetDocId = newDoc.id;
+      } catch (e: any) {
+        showToast(e.message || 'Failed to create document.', 'error');
+        return;
+      }
     } else {
       if (!importExistingFileId) {
         showToast('Please select an existing Test Case File to import into.', 'error');
@@ -698,64 +712,92 @@ function MainApp() {
     const statusIdx = headers.indexOf(selectedMapping.status);
 
     const importedCases: TestCase[] = [];
+    // Track TC numbers used in this import session to avoid collisions
+    const usedTcNosInSession = new Set<string>();
 
-    rows.forEach((row, idx) => {
-      if (row.length === 0) return;
+    try {
+      rows.forEach((row) => {
+        if (row.length === 0) return;
+        // Skip rows that are completely empty strings
+        if (row.every(cell => !cell.replace(/<[^>]+>/g, '').trim())) return;
 
-      const tcNo = tcNoIdx !== -1 && row[tcNoIdx] ? row[tcNoIdx].replace(/<[^>]+>/g, '').trim() : `TC-${String(testCases.length + importedCases.length + 1).padStart(3, '0')}`;
-      const name = nameIdx !== -1 && row[nameIdx] ? row[nameIdx].replace(/<[^>]+>/g, '').trim() : `TestCase Item #${testCases.length + importedCases.length + 1}`;
-      const objective = objIdx !== -1 && row[objIdx] ? row[objIdx].replace(/<[^>]+>/g, '').trim() : '';
-      
-      let steps = '';
-      if (stepsIdx !== -1 && row[stepsIdx]) {
-        if (fileType === 'docx') {
-          steps = row[stepsIdx]; // Keep rich text HTML formatting!
+        let tcNo = tcNoIdx !== -1 && row[tcNoIdx] ? row[tcNoIdx].replace(/<[^>]+>/g, '').trim() : '';
+        const name = nameIdx !== -1 && row[nameIdx] ? row[nameIdx].replace(/<[^>]+>/g, '').trim() : `TestCase Item #${testCases.length + importedCases.length + 1}`;
+        const objective = objIdx !== -1 && row[objIdx] ? row[objIdx].replace(/<[^>]+>/g, '').trim() : '';
+        
+        let steps = '';
+        if (stepsIdx !== -1 && row[stepsIdx]) {
+          if (fileType === 'docx') {
+            steps = row[stepsIdx]; // Keep rich text HTML formatting!
+          } else {
+            steps = `<ol><li>${row[stepsIdx].replace(/\n/g, '</li><li>')}</li></ol>`;
+          }
         } else {
-          steps = `<ol><li>${row[stepsIdx].replace(/\n/g, '</li><li>')}</li></ol>`;
+          steps = '<ol><li>Execute action module.</li></ol>';
         }
-      } else {
-        steps = '<ol><li>Execute action module.</li></ol>';
-      }
 
-      const issues = issuesIdx !== -1 && row[issuesIdx] ? row[issuesIdx].replace(/<[^>]+>/g, '').trim() : '';
-      
-      let rawStatus = statusIdx !== -1 && row[statusIdx] ? row[statusIdx].replace(/<[^>]+>/g, '').trim() : 'Not Fixed';
-      let status: TestCaseStatus = 'Not Fixed';
-      if (rawStatus.match(/fix/i)) status = 'Fixed';
-      else if (rawStatus.match(/progress/i)) status = 'In Progress';
-      else if (rawStatus.match(/block/i)) status = 'Blocked';
-      else if (rawStatus.match(/fail|not.*fix/i)) status = 'Not Fixed';
+        const issues = issuesIdx !== -1 && row[issuesIdx] ? row[issuesIdx].replace(/<[^>]+>/g, '').trim() : '';
+        
+        let rawStatus = statusIdx !== -1 && row[statusIdx] ? row[statusIdx].replace(/<[^>]+>/g, '').trim() : 'Not Fixed';
+        let status: TestCaseStatus = 'Not Fixed';
+        if (rawStatus.match(/fix/i)) status = 'Fixed';
+        else if (rawStatus.match(/progress/i)) status = 'In Progress';
+        else if (rawStatus.match(/block/i)) status = 'Blocked';
+        else if (rawStatus.match(/fail|not.*fix/i)) status = 'Not Fixed';
 
-      const newCase: TestCase = {
-        id: generateId(),
-        project_id: targetProjectId,
-        document_id: targetDocId,
-        test_case_no: tcNo,
-        name,
-        test_objective: objective,
-        test_steps: steps,
-        issues,
-        status,
-        display_order: testCases.length + importedCases.length + 1,
-        screenshots: [],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
+        // Auto-generate a unique TC number if blank or duplicate
+        if (!tcNo) {
+          tcNo = `TC-${String(testCases.length + importedCases.length + 1).padStart(3, '0')}`;
+        }
+        // Ensure uniqueness within this import session AND existing cases in the target document
+        const existingNos = new Set(getTestCases(targetDocId).map(tc => tc.test_case_no));
+        let uniqueTcNo = tcNo;
+        let suffix = 1;
+        while (usedTcNosInSession.has(uniqueTcNo) || existingNos.has(uniqueTcNo)) {
+          uniqueTcNo = `${tcNo}-IMP${suffix++}`;
+        }
+        usedTcNosInSession.add(uniqueTcNo);
 
-      saveTestCase(newCase);
-      importedCases.push(newCase);
-    });
+        const newCaseId = generateId();
+        const newCase: TestCase = {
+          id: newCaseId,
+          project_id: targetProjectId,
+          document_id: targetDocId,
+          test_case_no: uniqueTcNo,
+          name,
+          test_objective: objective,
+          test_steps: steps,
+          issues,
+          status,
+          display_order: testCases.length + importedCases.length + 1,
+          screenshots: [],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
 
-    addActivityLog(targetProjectId, `Imported ${importedCases.length} testcases into file`);
-    refreshData(targetProjectId, targetDocId);
-    setMappingConfig(null);
-    setImportSummary({
-      projectName: projects.find(p => p.id === targetProjectId)?.project_name || 'Imported Project',
-      documentName: getDocuments(targetProjectId).find(d => d.id === targetDocId)?.name || importNewFileName.trim() || 'Imported Document',
-      importedCount: importedCases.length,
-      imageCount: 0
-    });
-    showToast(`Successfully mapped and imported ${importedCases.length} test cases!`, 'success');
+        // Save directly to localStorage without duplicate-ID validation (we already ensured uniqueness above)
+        const allCases = getTestCasesAll();
+        allCases.push(newCase);
+        localStorage.setItem('tc_test_cases', JSON.stringify(allCases));
+        importedCases.push(newCase);
+      });
+
+      addActivityLog(targetProjectId, `Imported ${importedCases.length} testcases into file`);
+      refreshData(targetProjectId, targetDocId);
+      setImportSummary({
+        projectName: projects.find(p => p.id === targetProjectId)?.project_name || 'Imported Project',
+        documentName: getDocuments(targetProjectId).find(d => d.id === targetDocId)?.name || importNewFileName.trim() || 'Imported Document',
+        importedCount: importedCases.length,
+        imageCount: 0
+      });
+      showToast(`Successfully mapped and imported ${importedCases.length} test cases!`, 'success');
+    } catch (e: any) {
+      console.error('Import failed:', e);
+      showToast(e.message || 'Import failed. Please check the file and try again.', 'error');
+    } finally {
+      // Always close the mapping modal so the user is never stuck
+      setMappingConfig(null);
+    }
   };
 
   // Word & CSV exports
@@ -1287,9 +1329,51 @@ function MainApp() {
             /* DATABASE SPREADSHEET DATAGRID WORKSPACE */
             <div className="space-y-4">
               <div>
-                <h1 className="text-xl font-extrabold text-[#3B2A1D] tracking-tight">
-                  {activeProjectName}
-                  {activeDocumentName && <span className="font-normal text-[#7A6A5A]"> — {activeDocumentName}</span>}
+                <h1 className="text-xl font-extrabold text-[#3B2A1D] tracking-tight flex items-center">
+                  <span>{activeProjectName}</span>
+                  {activeDocumentName && (
+                    <span className="font-normal text-[#7A6A5A] ml-2 flex items-center">
+                      <span className="mr-2">—</span>
+                      {isEditingDocumentName ? (
+                        <input
+                          autoFocus
+                          type="text"
+                          value={editingDocumentName}
+                          onChange={(e) => setEditingDocumentName(e.target.value)}
+                          onBlur={() => {
+                            if (editingDocumentName.trim() && editingDocumentName !== activeDocumentName) {
+                              const doc = getDocuments(selectedProjectId).find(d => d.id === selectedDocumentId);
+                              if (doc) {
+                                saveDocument({ ...doc, name: editingDocumentName.trim() });
+                                refreshData(selectedProjectId, selectedDocumentId);
+                                showToast('Spreadsheet renamed successfully.', 'success');
+                              }
+                            }
+                            setIsEditingDocumentName(false);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.currentTarget.blur();
+                            } else if (e.key === 'Escape') {
+                              setIsEditingDocumentName(false);
+                            }
+                          }}
+                          className="px-2 py-1 text-xl font-normal text-[#7A6A5A] border border-[#E7D6C4] rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#8B5A2B] min-w-[200px]"
+                        />
+                      ) : (
+                        <span 
+                          onClick={() => {
+                            setEditingDocumentName(activeDocumentName);
+                            setIsEditingDocumentName(true);
+                          }}
+                          className="cursor-pointer hover:text-[#8B5A2B] hover:bg-[#FFF4E8] px-2 py-1 rounded-lg transition-colors border border-transparent hover:border-[#E7D6C4]"
+                          title="Click to rename spreadsheet"
+                        >
+                          {activeDocumentName}
+                        </span>
+                      )}
+                    </span>
+                  )}
                 </h1>
                 <p className="text-xs text-[#7A6A5A] mt-0.5">
                   {activeDocumentName 
@@ -1463,8 +1547,8 @@ function MainApp() {
 
       {/* UNIFIED COLUMNS ALIGNMENT IMPORT MAPPING MODAL */}
       {mappingConfig && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 animate-fade-in p-4">
-          <div className="bg-white border border-[#E7D6C4] rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 flex items-start justify-center z-50 animate-fade-in p-4 overflow-y-auto py-10">
+          <div className="bg-white border border-[#E7D6C4] rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4 my-auto h-fit" onClick={e => e.stopPropagation()}>
             <div className="flex items-start gap-3 pb-2 border-b border-[#F5EDE4]">
               <div className="p-2 bg-[#FFF4E8] text-[#8B5A2B] rounded-xl shrink-0 animate-pulse">
                 <Settings className="w-5 h-5" />
@@ -1517,7 +1601,12 @@ function MainApp() {
               ) : (
                 <div className="space-y-2 pt-1 animate-fade-in">
                   <label className="text-[10px] uppercase font-bold text-[#7A6A5A] tracking-wider block mb-0.5">Select Project</label>
-                  <select value={importSelectedProjectId} onChange={e => { setImportSelectedProjectId(e.target.value); setImportExistingFileId(''); }} className="w-full px-3 py-1.5 border border-[#E7D6C4] rounded-lg text-xs bg-white text-[#3B2A1D] focus:ring-1 focus:ring-[#8B5A2B] focus:outline-hidden cursor-pointer">
+                  <select value={importSelectedProjectId} onChange={e => { 
+                      const pId = e.target.value;
+                      setImportSelectedProjectId(pId);
+                      const docs = getDocuments(pId);
+                      setImportExistingFileId(docs.length > 0 ? docs[0].id : '');
+                    }} className="w-full px-3 py-1.5 border border-[#E7D6C4] rounded-lg text-xs bg-white text-[#3B2A1D] focus:ring-1 focus:ring-[#8B5A2B] focus:outline-hidden cursor-pointer">
                     {projects.filter(p => p.project_name?.trim()).map(p => <option key={p.id} value={p.id}>{p.project_name}</option>)}
                   </select>
                 </div>
@@ -1581,6 +1670,7 @@ function MainApp() {
                     onChange={e => setImportExistingFileId(e.target.value)}
                     className="w-full px-3 py-1.5 border border-[#E7D6C4] rounded-lg text-xs bg-white text-[#3B2A1D] focus:ring-1 focus:ring-[#8B5A2B] focus:outline-hidden cursor-pointer"
                   >
+                    <option value="" disabled>Select a file...</option>
                     {getDocuments(importSelectedProjectId || selectedProjectId).map(d => (
                       <option key={d.id} value={d.id}>{d.name}</option>
                     ))}

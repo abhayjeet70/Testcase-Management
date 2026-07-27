@@ -660,18 +660,13 @@ export default function TestCaseTable({
 
   // Paste Screenshot Handler
   const handlePasteScreenshot = async (e: React.ClipboardEvent, tcId: string) => {
+    const wasBroken = brokenImages[tcId];
     const items = e.clipboardData?.items;
     if (items) {
       for (const item of Array.from(items)) {
         if (item.type.indexOf('image') !== -1) {
           const file = item.getAsFile();
           if (file) {
-            setBrokenImages(prev => {
-              const next = { ...prev };
-              delete next[tcId];
-              return next;
-            });
-            
             try {
               setSaveStatus('Saving...');
               const publicUrl = await uploadFileToSupabase(file, 'screenshots');
@@ -685,11 +680,19 @@ export default function TestCaseTable({
               
               const original = testCases.find(tc => tc.id === tcId);
               if (original) {
+                const current = wasBroken ? [] : (original.screenshots || []);
                 const updated = {
                   ...original,
-                  screenshots: [...(original.screenshots || []), newScreenshot]
+                  screenshots: [...current, newScreenshot]
                 };
                 onSaveTestCase(updated);
+                
+                setBrokenImages(prev => {
+                  const next = { ...prev };
+                  delete next[tcId];
+                  return next;
+                });
+                
                 setSaveStatus('Saved');
               }
             } catch (error) {
@@ -710,13 +713,9 @@ export default function TestCaseTable({
 
   const handleDropScreenshot = async (e: React.DragEvent, tcId: string) => {
     e.preventDefault();
+    const wasBroken = brokenImages[tcId];
     const files = e.dataTransfer?.files;
     if (files && files.length > 0) {
-      setBrokenImages(prev => {
-        const next = { ...prev };
-        delete next[tcId];
-        return next;
-      });
       const file = files[0];
       
       try {
@@ -731,11 +730,19 @@ export default function TestCaseTable({
         };
         const original = testCases.find(tc => tc.id === tcId);
         if (original) {
+          const current = wasBroken ? [] : (original.screenshots || []);
           const updated = {
             ...original,
-            screenshots: [...(original.screenshots || []), newScreenshot]
+            screenshots: [...current, newScreenshot]
           };
           onSaveTestCase(updated);
+          
+          setBrokenImages(prev => {
+            const next = { ...prev };
+            delete next[tcId];
+            return next;
+          });
+          
           setSaveStatus('Saved');
         }
       } catch (error) {
@@ -747,14 +754,12 @@ export default function TestCaseTable({
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>, tcId: string) => {
+    const wasBroken = brokenImages[tcId];
     const files = e.target.files;
     if (files && files.length > 0) {
-      setBrokenImages(prev => {
-        const next = { ...prev };
-        delete next[tcId];
-        return next;
-      });
       const file = files[0];
+      e.target.value = '';
+
       
       try {
         setSaveStatus('Saving...');
@@ -768,11 +773,19 @@ export default function TestCaseTable({
         };
         const original = testCases.find(tc => tc.id === tcId);
         if (original) {
+          const current = wasBroken ? [] : (original.screenshots || []);
           const updated = {
             ...original,
-            screenshots: [...(original.screenshots || []), newScreenshot]
+            screenshots: [...current, newScreenshot]
           };
           onSaveTestCase(updated);
+          
+          setBrokenImages(prev => {
+            const next = { ...prev };
+            delete next[tcId];
+            return next;
+          });
+          
           setSaveStatus('Saved');
         }
       } catch (error) {
@@ -1525,10 +1538,10 @@ export default function TestCaseTable({
                               type="file"
                               accept="image/*"
                               onChange={(e) => handleFileSelect(e, tc.id)}
-                              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
                               title="Upload or Drag-and-drop Image here"
                             />
-                            <div className="py-1 text-[9px] text-[#7A6A5A]/70 font-semibold flex flex-col items-center justify-center gap-0.5">
+                            <div className="py-1 text-[9px] text-[#7A6A5A]/70 font-semibold flex flex-col items-center justify-center gap-0.5 pointer-events-none relative z-0">
                               {brokenImages[tc.id] ? (
                                 <ImageOff className="w-4 h-4 text-red-400/50 group-hover/no-img:text-red-400" />
                               ) : (
