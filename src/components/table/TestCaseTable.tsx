@@ -3,7 +3,7 @@ import {
   Plus, Copy, Trash2, ArrowUp, ArrowDown, Columns, 
   Search, Image as ImageIcon, ChevronDown, 
   Settings2, Eye, Download, Filter, Check, X, EyeOff, Clipboard,
-  Sparkles, Bold, Italic, List, ImageOff, Upload, Clock
+  Sparkles, Bold, Italic, List, ImageOff, Upload, Clock, ExternalLink
 } from 'lucide-react';
 import { TestCase, TestCaseStatus, CustomColumn, Screenshot, TestCaseDocument } from '../../types';
 import { generateId, saveDocument, getProjects, saveProject, addActivityLog } from '../../utils/storage';
@@ -853,14 +853,27 @@ export default function TestCaseTable({
                   <div className="flex flex-wrap items-center gap-3">
                     <div className="text-xs flex items-center gap-2">
                       <span className="text-[#7A6A5A] font-medium whitespace-nowrap">Project Link: </span>
-                      <input 
-                        type="text" 
-                        value={docProjectLink}
-                        onChange={(e) => setDocProjectLink(e.target.value)}
-                        onBlur={handleUpdateDocMetadata}
-                        placeholder="e.g. Jira/Notion link..."
-                        className="border border-[#E7D6C4] bg-white rounded px-2 py-0.5 focus:ring-1 focus:ring-[#8B5A2B] outline-none text-[#3B2A1D] w-36"
-                      />
+                      <div className="relative flex items-center">
+                        <input 
+                          type="text" 
+                          value={docProjectLink}
+                          onChange={(e) => setDocProjectLink(e.target.value)}
+                          onBlur={handleUpdateDocMetadata}
+                          placeholder="e.g. Jira/Notion link..."
+                          className="border border-[#E7D6C4] bg-white rounded px-2 py-0.5 focus:ring-1 focus:ring-[#8B5A2B] outline-none text-[#3B2A1D] w-36 pr-6"
+                        />
+                        {docProjectLink && (
+                          <a 
+                            href={docProjectLink.startsWith('http') ? docProjectLink : `https://${docProjectLink}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="absolute right-1 text-[#8B5A2B] hover:text-[#3B2A1D] flex items-center justify-center p-0.5 rounded hover:bg-[#FDFBF7]"
+                            title="Open Link"
+                          >
+                            <ExternalLink size={12} />
+                          </a>
+                        )}
+                      </div>
                     </div>
                     <div className="text-xs flex items-center gap-2">
                       <span className="text-[#7A6A5A] font-medium whitespace-nowrap">Developer: </span>
