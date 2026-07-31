@@ -253,7 +253,15 @@ export function parseCsvContent(text: string): Partial<TestCase>[] {
     let stepsVal = row[stepsIdx !== -1 ? stepsIdx : 3] || '';
     if (stepsVal && !stepsVal.includes('<')) {
       // split by numbers or lines to convert into HTML lists
-      const listItems = stepsVal.split(/\n+/).map(step => `<li>${step.replace(/^\d+[\.\-\s]+/, '')}</li>`).join('');
+      let items = stepsVal.split(/\n+/);
+      if (items.length === 1 && /\b1[\.\)]\s/.test(stepsVal)) {
+        // Handle single-line numbered lists (e.g., "1. Step one 2. Step two")
+        items = stepsVal.split(/\s+(?=\d+[\.\)]\s)/).filter(Boolean);
+      }
+      const listItems = items
+        .map(step => `<li>${step.replace(/^\d+[\.\-\)]*\s+/, '').trim()}</li>`)
+        .filter(item => item !== '<li></li>')
+        .join('');
       stepsVal = `<ol>${listItems}</ol>`;
     }
 
